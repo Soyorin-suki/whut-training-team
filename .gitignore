@@ -1,0 +1,30 @@
+/.idea/
+*.iml
+
+# Java
+**/target/
+**/out/
+*.log
+*.log.*
+hs_err_pid*
+replay_pid*
+
+# Backend runtime files
+backend/*.db
+backend/*.db-*
+backend/*.sqlite
+backend/*.sqlite3
+
+# Node
+**/node_modules/
+**/dist/
+**/.vite/
+**/coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend env files
+frontend/.env.local
+frontend/.env.*.local
