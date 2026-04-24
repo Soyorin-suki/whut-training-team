@@ -1,6 +1,7 @@
 package com.whut.training.config;
 
 import com.whut.training.interceptor.AccessTokenInterceptor;
+import com.whut.training.interceptor.RequestLoggingInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -10,9 +11,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final AccessTokenInterceptor accessTokenInterceptor;
+    private final RequestLoggingInterceptor requestLoggingInterceptor;
 
-    public WebConfig(AccessTokenInterceptor accessTokenInterceptor) {
+    public WebConfig(AccessTokenInterceptor accessTokenInterceptor,
+                     RequestLoggingInterceptor requestLoggingInterceptor) {
         this.accessTokenInterceptor = accessTokenInterceptor;
+        this.requestLoggingInterceptor = requestLoggingInterceptor;
     }
 
     @Override
@@ -26,6 +30,9 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(requestLoggingInterceptor)
+                .addPathPatterns("/api/**");
+
         registry.addInterceptor(accessTokenInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(

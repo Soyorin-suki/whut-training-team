@@ -13,7 +13,7 @@ const NAV_ITEMS = [
 const MOCK_CONTENT = {
   overview: {
     title: "项目总览",
-    desc: "这里展示训练团队的整体运行情况，当前使用的是演示数据。",
+    desc: "这里展示训练团队的整体运行情况，当前使用演示数据。",
     cards: [
       { name: "今日活跃用户", value: "128" },
       { name: "本周新增任务", value: "34" },
@@ -58,10 +58,30 @@ const MOCK_CONTENT = {
   }
 };
 
+function formatOnline(online) {
+  if (online === null || online === undefined) {
+    return "-";
+  }
+  return online ? "online" : "offline";
+}
+
+function getRatingMeta(rating) {
+  if (rating === null || rating === undefined) {
+    return { label: "Unrated", color: "#6b7280" };
+  }
+  if (rating < 1200) return { label: "Newbie", color: "#6b7280" };
+  if (rating < 1400) return { label: "Pupil", color: "#16a34a" };
+  if (rating < 1600) return { label: "Specialist", color: "#0ea5e9" };
+  if (rating < 1900) return { label: "Expert", color: "#2563eb" };
+  if (rating < 2100) return { label: "Candidate Master", color: "#7c3aed" };
+  if (rating < 2300) return { label: "Master", color: "#f59e0b" };
+  if (rating < 2400) return { label: "International Master", color: "#f97316" };
+  return { label: "Grandmaster+", color: "#dc2626" };
+}
+
 export default function MainView({ auth, onLogout, onNavigate }) {
   const [activeNav, setActiveNav] = useState("overview");
   const [showProfile, setShowProfile] = useState(false);
-  const panel = MOCK_CONTENT[activeNav];
   const user = auth?.user ?? null;
 
   const profileItems = useMemo(
@@ -71,10 +91,40 @@ export default function MainView({ auth, onLogout, onNavigate }) {
             { label: "用户名", value: user.username || "-" },
             { label: "邮箱", value: user.email || "-" },
             { label: "角色", value: user.role || "-" },
-            { label: "用户 ID", value: user.id ?? "-" }
+            { label: "用户 ID", value: user.id ?? "-" },
+            { label: "CF UID", value: user.uid ?? "-" },
+            { label: "CF Rating", value: user.codeforcesRating ?? "-" },
+            { label: "CF MaxRating", value: user.maxRating ?? "-" },
+            { label: "在线状态", value: formatOnline(user.online) },
+            { label: "最近在线", value: user.lastOnlineTimeIso || "-" }
           ]
         : [],
     [user]
+  );
+
+  const ratingMeta = useMemo(() => getRatingMeta(user?.codeforcesRating), [user?.codeforcesRating]);
+
+  const panel = useMemo(() => {
+    if (activeNav === "profile") {
+      return {
+        title: "用户主页",
+        desc: "参考 Codeforces 风格展示你的账户信息与活跃状态。"
+      };
+    }
+    return MOCK_CONTENT[activeNav];
+  }, [activeNav]);
+
+  const profileEvents = useMemo(
+    () =>
+      user
+        ? [
+            `欢迎回来，${user.username || "同学"}。`,
+            `当前等级：${ratingMeta.label}`,
+            `最近在线时间：${user.lastOnlineTimeIso || "-"}`,
+            `UID：${user.uid ?? "-"}`
+          ]
+        : [],
+    [ratingMeta.label, user]
   );
 
   async function handleLogout() {
@@ -83,7 +133,7 @@ export default function MainView({ auth, onLogout, onNavigate }) {
         await logout(auth.tokens);
       }
     } catch {
-      // Frontend state should still clear even if backend logout fails.
+      // ignore
     } finally {
       setShowProfile(false);
       onLogout?.();
@@ -120,29 +170,33 @@ export default function MainView({ auth, onLogout, onNavigate }) {
               <button className="ghost-button" type="button" onClick={() => onNavigate?.("login")}>
                 登录
               </button>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => onNavigate?.("register")}
-              >
+              <button className="primary-button" type="button" onClick={() => onNavigate?.("register")}>
                 注册
               </button>
             </div>
           ) : (
-            <div className="profile-anchor">
-              <button
-                className="avatar-button"
-                type="button"
-                onClick={() => setShowProfile((prev) => !prev)}
-              >
-                <span className="avatar-badge">{getUserInitial(user)}</span>
+            <div
+              className="profile-anchor"
+              onMouseEnter={() => setShowProfile(true)}
+              onMouseLeave={() => setShowProfile(false)}
+            >
+              <button className="avatar-button" type="button" onClick={() => setActiveNav("profile")}>
+                {user.avatarUrl ? (
+                  <img className="avatar-image" src={user.avatarUrl} alt="avatar" />
+                ) : (
+                  <span className="avatar-badge">{getUserInitial(user)}</span>
+                )}
                 <span className="avatar-name">{user.username || "已登录用户"}</span>
               </button>
 
               {showProfile && (
                 <div className="profile-card">
                   <div className="profile-summary">
-                    <span className="profile-avatar-large">{getUserInitial(user)}</span>
+                    {user.avatarUrl ? (
+                      <img className="profile-avatar-image" src={user.avatarUrl} alt="avatar" />
+                    ) : (
+                      <span className="profile-avatar-large">{getUserInitial(user)}</span>
+                    )}
                     <div>
                       <strong>{user.username || "未命名用户"}</strong>
                       <p>{user.email || "未设置邮箱"}</p>
@@ -167,15 +221,68 @@ export default function MainView({ auth, onLogout, onNavigate }) {
           )}
         </header>
 
-        <div className="content-grid">
-          {panel.cards.map((card) => (
-            <article className="content-card" key={card.name}>
-              <h2>{card.name}</h2>
-              <strong>{card.value}</strong>
+        {activeNav === "profile" && user ? (
+          <section className="cf-profile">
+            <article className="cf-hero">
+              <div className="cf-identity">
+                {user.avatarUrl ? (
+                  <img className="cf-hero-avatar" src={user.avatarUrl} alt="avatar" />
+                ) : (
+                  <span className="cf-hero-fallback">{getUserInitial(user)}</span>
+                )}
+                <div>
+                  <h2 className="cf-handle" style={{ color: ratingMeta.color }}>
+                    {user.username || "unknown"}
+                  </h2>
+                  <p className="cf-rank">{ratingMeta.label}</p>
+                  <p className="cf-meta">
+                    UID: {user.uid ?? "-"} · Role: {user.role || "-"}
+                  </p>
+                </div>
+              </div>
+              <div className="cf-rating-box">
+                <span>current rating</span>
+                <strong>{user.codeforcesRating ?? "—"}</strong>
+                <small>max {user.maxRating ?? "—"}</small>
+              </div>
             </article>
-          ))}
-        </div>
+
+            <section className="cf-stat-grid">
+              <article className="cf-stat">
+                <span>在线状态</span>
+                <strong>{formatOnline(user.online)}</strong>
+              </article>
+              <article className="cf-stat">
+                <span>最近在线</span>
+                <strong>{user.lastOnlineTimeIso || "-"}</strong>
+              </article>
+              <article className="cf-stat">
+                <span>邮箱</span>
+                <strong>{user.email || "-"}</strong>
+              </article>
+            </section>
+
+            <section className="cf-events">
+              <h3>Recent activity</h3>
+              <ul>
+                {profileEvents.map((event) => (
+                  <li key={event}>{event}</li>
+                ))}
+              </ul>
+            </section>
+          </section>
+        ) : (
+          <div className="content-grid">
+            {panel.cards.map((card) => (
+              <article className="content-card" key={card.name}>
+                <h2>{card.name}</h2>
+                <strong>{card.value}</strong>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
 }
+

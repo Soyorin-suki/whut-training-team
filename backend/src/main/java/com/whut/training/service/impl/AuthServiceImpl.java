@@ -1,5 +1,6 @@
 package com.whut.training.service.impl;
 
+import com.whut.training.aspect.annotation.ServiceLog;
 import com.whut.training.domain.dto.LoginRequest;
 import com.whut.training.domain.dto.LoginResponse;
 import com.whut.training.domain.dto.RefreshTokenResponse;
@@ -14,6 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@ServiceLog
 public class AuthServiceImpl implements AuthService {
 
     private static final long ACCESS_TOKEN_TTL_SECONDS = 30 * 60;
@@ -46,6 +48,12 @@ public class AuthServiceImpl implements AuthService {
                 user.getUsername(),
                 user.getEmail(),
                 user.getRole(),
+                user.getUid(),
+                user.getCodeforcesRating(),
+                user.getMaxRating(),
+                user.getOnline(),
+                user.getLastOnlineTimeSeconds(),
+                user.getAvatarUrl(),
                 pair.accessToken(),
                 pair.refreshToken()
         );
