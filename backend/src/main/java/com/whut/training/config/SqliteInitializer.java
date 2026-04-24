@@ -24,9 +24,9 @@ public class SqliteInitializer {
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT NOT NULL UNIQUE,
-                    email TEXT NOT NULL,
+                    email TEXT,
                     password TEXT NOT NULL,
-                    role TEXT NOT NULL
+                    role TEXT
                 )
                 """);
     }
