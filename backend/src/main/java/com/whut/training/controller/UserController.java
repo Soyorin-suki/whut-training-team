@@ -1,7 +1,7 @@
 package com.whut.training.controller;
 
 import com.whut.training.common.ApiResponse;
-import com.whut.training.domain.dto.UserCreateRequest;
+import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
 import com.whut.training.service.UserService;
 import jakarta.validation.Valid;
@@ -19,9 +19,9 @@ public class UserController {
         this.userService = userService;
     }
 
-    @PostMapping
-    public ApiResponse<User> create(@Valid @RequestBody UserCreateRequest request) {
-        return ApiResponse.ok(userService.create(request));
+    @PostMapping("/register")
+    public ApiResponse<User> register(@Valid @RequestBody UserRegisterRequest request) {
+        return ApiResponse.ok(userService.register(request));
     }
 
     @GetMapping
@@ -34,4 +34,3 @@ public class UserController {
         return ApiResponse.ok(userService.getById(id));
     }
 }
-

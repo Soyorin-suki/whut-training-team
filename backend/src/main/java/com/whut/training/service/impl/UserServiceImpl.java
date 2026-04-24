@@ -1,7 +1,9 @@
 package com.whut.training.service.impl;
 
-import com.whut.training.domain.dto.UserCreateRequest;
+import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
+import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.UserRepository;
 import com.whut.training.service.UserService;
@@ -20,8 +22,20 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User create(UserCreateRequest request) {
-        User user = new User(null, request.getUsername(), request.getEmail());
+    public User register(UserRegisterRequest request) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new BusinessException(400, "username already exists");
+        }
+        User user = new User(null, request.getUsername(), request.getEmail(), request.getPassword(), UserRole.USER);
+        return userRepository.save(user);
+    }
+
+    @Override
+    public User createByAdmin(AdminCreateUserRequest request) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new BusinessException(400, "username already exists");
+        }
+        User user = new User(null, request.getUsername(), request.getEmail(), request.getPassword(), request.getRole());
         return userRepository.save(user);
     }
 
@@ -37,5 +51,10 @@ public class UserServiceImpl implements UserService {
         return userRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(404, "user not found: " + id));
     }
-}
 
+    @Override
+    public User getByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new BusinessException(404, "user not found: " + username));
+    }
+}

@@ -30,5 +30,14 @@ public class UserRepository {
     public Optional<User> findById(Long id) {
         return Optional.ofNullable(data.get(id));
     }
-}
 
+    public Optional<User> findByUsername(String username) {
+        return data.values().stream()
+                .filter(user -> user.getUsername().equals(username))
+                .findFirst();
+    }
+
+    public boolean existsByUsername(String username) {
+        return findByUsername(username).isPresent();
+    }
+}

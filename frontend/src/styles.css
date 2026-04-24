@@ -30,8 +30,9 @@ body {
 .form {
   margin: 16px 0;
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
+  align-items: center;
 }
 
 input {
@@ -57,4 +58,3 @@ button {
   margin: 0;
   padding-left: 20px;
 }
-
