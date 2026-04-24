@@ -4,9 +4,11 @@ import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
 @Component
+@DependsOn("sqliteInitializer")
 public class DataInitializer {
 
     private final UserRepository userRepository;

@@ -1,7 +1,6 @@
 package com.whut.training.config;
 
 import com.whut.training.interceptor.AccessTokenInterceptor;
-import com.whut.training.interceptor.RefreshTokenInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -11,12 +10,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final AccessTokenInterceptor accessTokenInterceptor;
-    private final RefreshTokenInterceptor refreshTokenInterceptor;
 
-    public WebConfig(AccessTokenInterceptor accessTokenInterceptor,
-                     RefreshTokenInterceptor refreshTokenInterceptor) {
+    public WebConfig(AccessTokenInterceptor accessTokenInterceptor) {
         this.accessTokenInterceptor = accessTokenInterceptor;
-        this.refreshTokenInterceptor = refreshTokenInterceptor;
     }
 
     @Override
@@ -35,15 +31,9 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/health",
                         "/api/users/register",
-                        "/api/auth/login"
-                );
-
-        registry.addInterceptor(refreshTokenInterceptor)
-                .addPathPatterns("/api/**")
-                .excludePathPatterns(
-                        "/api/health",
-                        "/api/users/register",
-                        "/api/auth/login"
+                        "/api/auth/login",
+                        "/api/auth/refresh",
+                        "/api/auth/logout"
                 );
     }
 }

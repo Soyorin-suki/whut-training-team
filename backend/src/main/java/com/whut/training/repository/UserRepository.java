@@ -1,43 +1,87 @@
 package com.whut.training.repository;
 
 import com.whut.training.domain.entity.User;
+import com.whut.training.domain.enums.UserRole;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Repository
 public class UserRepository {
 
-    private final ConcurrentHashMap<Long, User> data = new ConcurrentHashMap<>();
-    private final AtomicLong idGenerator = new AtomicLong(1);
+    private final JdbcTemplate jdbcTemplate;
+    private final RowMapper<User> userRowMapper = (rs, rowNum) -> new User(
+            rs.getLong("id"),
+            rs.getString("username"),
+            rs.getString("email"),
+            rs.getString("password"),
+            UserRole.valueOf(rs.getString("role"))
+    );
+
+    public UserRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     public User save(User user) {
         if (user.getId() == null) {
-            user.setId(idGenerator.getAndIncrement());
+            jdbcTemplate.update(
+                    "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)",
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getPassword(),
+                    user.getRole().name()
+            );
+            Long id = jdbcTemplate.queryForObject(
+                    "SELECT id FROM users WHERE username = ?",
+                    Long.class,
+                    user.getUsername()
+            );
+            user.setId(id);
+            return user;
         }
-        data.put(user.getId(), user);
+
+        jdbcTemplate.update(
+                "UPDATE users SET username = ?, email = ?, password = ?, role = ? WHERE id = ?",
+                user.getUsername(),
+                user.getEmail(),
+                user.getPassword(),
+                user.getRole().name(),
+                user.getId()
+        );
         return user;
     }
 
     public List<User> findAll() {
-        return new ArrayList<>(data.values());
+        return jdbcTemplate.query("SELECT id, username, email, password, role FROM users", userRowMapper);
     }
 
     public Optional<User> findById(Long id) {
-        return Optional.ofNullable(data.get(id));
+        List<User> users = jdbcTemplate.query(
+                "SELECT id, username, email, password, role FROM users WHERE id = ?",
+                userRowMapper,
+                id
+        );
+        return users.stream().findFirst();
     }
 
     public Optional<User> findByUsername(String username) {
-        return data.values().stream()
-                .filter(user -> user.getUsername().equals(username))
-                .findFirst();
+        List<User> users = jdbcTemplate.query(
+                "SELECT id, username, email, password, role FROM users WHERE username = ?",
+                userRowMapper,
+                username
+        );
+        return users.stream().findFirst();
     }
 
     public boolean existsByUsername(String username) {
-        return findByUsername(username).isPresent();
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM users WHERE username = ?",
+                Integer.class,
+                username
+        );
+        return count != null && count > 0;
     }
 }
