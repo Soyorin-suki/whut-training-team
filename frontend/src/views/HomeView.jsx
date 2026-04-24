@@ -1,229 +1,211 @@
-import { useState } from "react";
-import { adminCreateUser, listUsers, login, logout, registerUser } from "../api/user";
+import { useEffect, useState } from "react";
+import { buildAuthFromLogin } from "../auth";
+import { login, registerUser } from "../api/user";
 
-export default function HomeView() {
-  const [users, setUsers] = useState([]);
-  const [registerForm, setRegisterForm] = useState({
-    username: "",
-    email: "",
-    password: ""
-  });
+const LOGIN = "login";
+const REGISTER = "register";
+
+export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigate }) {
+  const [page, setPage] = useState(initialPage);
+  const [message, setMessage] = useState("");
   const [loginForm, setLoginForm] = useState({
     username: "",
     password: ""
   });
-  const [adminCreateForm, setAdminCreateForm] = useState({
+  const [registerForm, setRegisterForm] = useState({
     username: "",
-    email: "",
     password: "",
-    role: "USER"
+    confirmPassword: "",
+    qq: "",
+    email: "",
+    realName: ""
   });
-  const [auth, setAuth] = useState(null);
-  const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadUsers() {
-    if (!auth) {
-      return;
+  useEffect(() => {
+    setPage(initialPage);
+    setMessage("");
+  }, [initialPage]);
+
+  async function onLogin(event) {
+    event.preventDefault();
+    setMessage("");
+
+    try {
+      const resp = await login({
+        username: loginForm.username.trim(),
+        password: loginForm.password
+      });
+
+      if (resp.code !== 200) {
+        setMessage(resp.message || "登录失败");
+        return;
+      }
+
+      const auth = buildAuthFromLogin(resp.data);
+      if (!auth) {
+        setMessage("登录成功，但未获取到完整凭证");
+        return;
+      }
+
+      onAuthSuccess?.(auth);
+    } catch (error) {
+      setMessage(error.response?.data?.message || "登录请求失败");
     }
-    const resp = await listUsers(auth);
-    if (resp.code !== 200) {
-      setErrorMessage(resp.message);
-      return;
-    }
-    setUsers(resp.data ?? []);
   }
 
   async function onRegister(event) {
     event.preventDefault();
-    const resp = await registerUser(registerForm);
-    if (resp.code !== 200) {
-      setErrorMessage(resp.message);
+    setMessage("");
+
+    const username = registerForm.username.trim();
+    const password = registerForm.password;
+    const confirmPassword = registerForm.confirmPassword;
+    const qq = registerForm.qq.trim();
+    const email = registerForm.email.trim();
+    const realName = registerForm.realName.trim();
+
+    if (password !== confirmPassword) {
+      setMessage("两次输入的密码不一致");
       return;
     }
-    setErrorMessage("");
-    setRegisterForm({
-      username: "",
-      email: "",
-      password: ""
-    });
-    await loadUsers();
+
+    const payload = { username, password };
+    if (qq) payload.qq = qq;
+    if (realName) payload.name = realName;
+    payload.email = email || `${username}@whut.local`;
+
+    try {
+      const resp = await registerUser(payload);
+      if (resp.code !== 200) {
+        setMessage(resp.message || "注册失败");
+        return;
+      }
+
+      setMessage("注册成功，请登录");
+      setPage(LOGIN);
+      onNavigate?.(LOGIN);
+      setLoginForm((prev) => ({ ...prev, username, password: "" }));
+      setRegisterForm({
+        username: "",
+        password: "",
+        confirmPassword: "",
+        qq: "",
+        email: "",
+        realName: ""
+      });
+    } catch (error) {
+      setMessage(error.response?.data?.message || "注册请求失败");
+    }
   }
 
-  async function onAdminCreate(event) {
-    event.preventDefault();
-    const resp = await adminCreateUser(adminCreateForm, auth);
-    if (resp.code !== 200) {
-      setErrorMessage(resp.message);
-      return;
-    }
-    setErrorMessage("");
-    setAdminCreateForm({
-      username: "",
-      email: "",
-      password: "",
-      role: "USER"
-    });
-    await loadUsers();
-  }
-
-  async function onLogin(event) {
-    event.preventDefault();
-    const resp = await login(loginForm);
-    if (resp.code !== 200) {
-      setErrorMessage(resp.message);
-      return;
-    }
-
-    setErrorMessage("");
-    setAuth(resp.data);
-    const listResp = await listUsers(resp.data);
-    if (listResp.code === 200) {
-      setUsers(listResp.data ?? []);
-    }
-    setLoginForm({
-      username: "",
-      password: ""
-    });
-  }
-
-  async function onLogout() {
-    if (!auth) {
-      return;
-    }
-
-    const resp = await logout(auth);
-    if (resp.code !== 200) {
-      setErrorMessage(resp.message);
-      return;
-    }
-    setErrorMessage("");
-    setAuth(null);
-    setUsers([]);
+  function switchPage(nextPage) {
+    setMessage("");
+    setPage(nextPage);
+    onNavigate?.(nextPage);
   }
 
   return (
     <main className="page">
-      <section className="card">
-        <h1>Java Web MVC Skeleton</h1>
-        <p>Frontend: React. Backend: Spring Boot.</p>
+      <section className="auth-card">
+        <h1 className="auth-title">{page === LOGIN ? "登录" : "注册"}</h1>
+        {message && <p className="auth-message">{message}</p>}
 
-        {errorMessage && <p>{errorMessage}</p>}
-
-        <h3>Register</h3>
-        <form className="form" onSubmit={onRegister}>
-          <input
-            value={registerForm.username}
-            onChange={(event) =>
-              setRegisterForm((prev) => ({ ...prev, username: event.target.value }))
-            }
-            placeholder="username"
-            required
-          />
-          <input
-            value={registerForm.email}
-            onChange={(event) =>
-              setRegisterForm((prev) => ({ ...prev, email: event.target.value }))
-            }
-            type="email"
-            placeholder="email"
-            required
-          />
-          <input
-            value={registerForm.password}
-            onChange={(event) =>
-              setRegisterForm((prev) => ({ ...prev, password: event.target.value }))
-            }
-            type="password"
-            placeholder="password"
-            required
-          />
-          <button type="submit">Register</button>
-        </form>
-
-        <h3>Login</h3>
-        <form className="form" onSubmit={onLogin}>
-          <input
-            value={loginForm.username}
-            onChange={(event) =>
-              setLoginForm((prev) => ({ ...prev, username: event.target.value }))
-            }
-            placeholder="username"
-            required
-          />
-          <input
-            value={loginForm.password}
-            onChange={(event) =>
-              setLoginForm((prev) => ({ ...prev, password: event.target.value }))
-            }
-            type="password"
-            placeholder="password"
-            required
-          />
-          <button type="submit">Login</button>
-        </form>
-
-        <p>
-          Login State: {auth ? `logged in as ${auth.username} (${auth.role})` : "not logged in"}
-        </p>
-        {auth?.accessToken && <p>Access Token: {auth.accessToken}</p>}
-        {auth?.refreshToken && <p>Refresh Token: {auth.refreshToken}</p>}
-        <button className="refresh" onClick={onLogout} disabled={!auth}>
-          Logout
-        </button>
-
-        {auth?.role === "ADMIN" && (
-          <>
-            <h3>Admin Create User</h3>
-            <form className="form" onSubmit={onAdminCreate}>
-              <input
-                value={adminCreateForm.username}
-                onChange={(event) =>
-                  setAdminCreateForm((prev) => ({ ...prev, username: event.target.value }))
-                }
-                placeholder="username"
-                required
-              />
-              <input
-                value={adminCreateForm.email}
-                onChange={(event) =>
-                  setAdminCreateForm((prev) => ({ ...prev, email: event.target.value }))
-                }
-                type="email"
-                placeholder="email"
-                required
-              />
-              <input
-                value={adminCreateForm.password}
-                onChange={(event) =>
-                  setAdminCreateForm((prev) => ({ ...prev, password: event.target.value }))
-                }
-                type="password"
-                placeholder="password"
-                required
-              />
-              <select
-                value={adminCreateForm.role}
-                onChange={(event) =>
-                  setAdminCreateForm((prev) => ({ ...prev, role: event.target.value }))
-                }
-              >
-                <option value="USER">USER</option>
-                <option value="ADMIN">ADMIN</option>
-              </select>
-              <button type="submit">Create</button>
-            </form>
-          </>
+        {page === LOGIN ? (
+          <form className="auth-form" onSubmit={onLogin}>
+            <input
+              className="auth-input"
+              value={loginForm.username}
+              onChange={(event) =>
+                setLoginForm((prev) => ({ ...prev, username: event.target.value }))
+              }
+              placeholder="用户名"
+              required
+            />
+            <input
+              className="auth-input"
+              value={loginForm.password}
+              onChange={(event) =>
+                setLoginForm((prev) => ({ ...prev, password: event.target.value }))
+              }
+              type="password"
+              placeholder="密码"
+              required
+            />
+            <button className="auth-button" type="submit">
+              登录
+            </button>
+          </form>
+        ) : (
+          <form className="auth-form" onSubmit={onRegister}>
+            <input
+              className="auth-input"
+              value={registerForm.username}
+              onChange={(event) =>
+                setRegisterForm((prev) => ({ ...prev, username: event.target.value }))
+              }
+              placeholder="用户名（必填）"
+              required
+            />
+            <input
+              className="auth-input"
+              value={registerForm.password}
+              onChange={(event) =>
+                setRegisterForm((prev) => ({ ...prev, password: event.target.value }))
+              }
+              type="password"
+              placeholder="密码（至少 6 位）"
+              required
+            />
+            <input
+              className="auth-input"
+              value={registerForm.confirmPassword}
+              onChange={(event) =>
+                setRegisterForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+              }
+              type="password"
+              placeholder="确认密码"
+              required
+            />
+            <input
+              className="auth-input"
+              value={registerForm.qq}
+              onChange={(event) =>
+                setRegisterForm((prev) => ({ ...prev, qq: event.target.value }))
+              }
+              placeholder="QQ（选填）"
+            />
+            <input
+              className="auth-input"
+              value={registerForm.email}
+              onChange={(event) =>
+                setRegisterForm((prev) => ({ ...prev, email: event.target.value }))
+              }
+              type="email"
+              placeholder="邮箱（选填）"
+            />
+            <input
+              className="auth-input"
+              value={registerForm.realName}
+              onChange={(event) =>
+                setRegisterForm((prev) => ({ ...prev, realName: event.target.value }))
+              }
+              placeholder="真实姓名（选填）"
+            />
+            <button className="auth-button" type="submit">
+              注册
+            </button>
+          </form>
         )}
 
-        <button className="refresh" onClick={loadUsers}>Refresh Users</button>
-
-        <ul className="list">
-          {users.map((user) => (
-            <li key={user.id}>
-              #{user.id} {user.username} ({user.email}) [{user.role}]
-            </li>
-          ))}
-        </ul>
+        {page === LOGIN ? (
+          <button className="switch-link" type="button" onClick={() => switchPage(REGISTER)}>
+            去注册
+          </button>
+        ) : (
+          <button className="switch-link" type="button" onClick={() => switchPage(LOGIN)}>
+            返回登录
+          </button>
+        )}
       </section>
     </main>
   );

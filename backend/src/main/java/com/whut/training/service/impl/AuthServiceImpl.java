@@ -2,6 +2,7 @@ package com.whut.training.service.impl;
 
 import com.whut.training.domain.dto.LoginRequest;
 import com.whut.training.domain.dto.LoginResponse;
+import com.whut.training.domain.dto.RefreshTokenResponse;
 import com.whut.training.domain.entity.User;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.service.AuthService;
@@ -19,8 +20,8 @@ public class AuthServiceImpl implements AuthService {
     private static final long REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
     private final UserService userService;
-    private final ConcurrentHashMap<String, Session> accessStore = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, String> refreshToAccessStore = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AccessSession> accessStore = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, RefreshSession> refreshStore = new ConcurrentHashMap<>();
 
     public AuthServiceImpl(UserService userService) {
         this.userService = userService;
@@ -38,65 +39,104 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(401, "invalid username or password");
         }
 
-        String accessToken = UUID.randomUUID().toString();
-        String refreshToken = UUID.randomUUID().toString();
-        Instant now = Instant.now();
-        Session session = new Session(
-                user.getId(),
-                refreshToken,
-                now.plusSeconds(ACCESS_TOKEN_TTL_SECONDS),
-                now.plusSeconds(REFRESH_TOKEN_TTL_SECONDS)
-        );
-        accessStore.put(accessToken, session);
-        refreshToAccessStore.put(refreshToken, accessToken);
+        TokenPair pair = issueTokenPair(user.getId());
 
         return new LoginResponse(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getRole(),
-                accessToken,
-                refreshToken
+                pair.accessToken(),
+                pair.refreshToken()
         );
     }
 
     @Override
-    public void logout(String accessToken, String refreshToken) {
-        Session session = validateSession(accessToken, refreshToken);
-        accessStore.remove(accessToken);
-        refreshToAccessStore.remove(session.refreshToken());
+    public RefreshTokenResponse refresh(String refreshToken) {
+        RefreshSession refreshSession = validateRefreshSession(refreshToken);
+        accessStore.remove(refreshSession.accessToken());
+        refreshStore.remove(refreshToken);
+
+        TokenPair nextPair = issueTokenPair(refreshSession.userId());
+        return new RefreshTokenResponse(nextPair.accessToken(), nextPair.refreshToken());
     }
 
     @Override
-    public User validateAndGetUser(String accessToken, String refreshToken) {
-        Session session = validateSession(accessToken, refreshToken);
-        return userService.getById(session.userId());
+    public void logout(String accessToken, String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new BusinessException(401, "invalid refresh token");
+        }
+
+        RefreshSession refreshSession = refreshStore.remove(refreshToken);
+        if (refreshSession == null) {
+            throw new BusinessException(401, "invalid refresh token");
+        }
+
+        accessStore.remove(refreshSession.accessToken());
+        if (accessToken != null && !accessToken.isBlank()) {
+            accessStore.remove(accessToken);
+        }
     }
 
-    private Session validateSession(String accessToken, String refreshToken) {
-        Session session = accessStore.get(accessToken);
-        if (session == null) {
-            throw new BusinessException(401, "invalid token pair");
+    @Override
+    public User validateAccessTokenAndGetUser(String accessToken) {
+        AccessSession accessSession = validateAccessSession(accessToken);
+        return userService.getById(accessSession.userId());
+    }
+
+    private AccessSession validateAccessSession(String accessToken) {
+        AccessSession accessSession = accessStore.get(accessToken);
+        if (accessSession == null) {
+            throw new BusinessException(401, "invalid access token");
+        }
+        Instant now = Instant.now();
+        if (now.isAfter(accessSession.accessExpiredAt())) {
+            accessStore.remove(accessToken);
+            throw new BusinessException(401, "access token expired");
+        }
+        return accessSession;
+    }
+
+    private RefreshSession validateRefreshSession(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new BusinessException(401, "invalid refresh token");
         }
 
-        if (!session.refreshToken().equals(refreshToken)) {
-            throw new BusinessException(401, "invalid token pair");
-        }
-
-        String linkedAccessToken = refreshToAccessStore.get(refreshToken);
-        if (linkedAccessToken == null || !linkedAccessToken.equals(accessToken)) {
-            throw new BusinessException(401, "invalid token pair");
+        RefreshSession refreshSession = refreshStore.get(refreshToken);
+        if (refreshSession == null) {
+            throw new BusinessException(401, "invalid refresh token");
         }
 
         Instant now = Instant.now();
-        if (now.isAfter(session.accessExpiredAt()) || now.isAfter(session.refreshExpiredAt())) {
-            accessStore.remove(accessToken);
-            refreshToAccessStore.remove(refreshToken);
-            throw new BusinessException(401, "token expired");
+        if (now.isAfter(refreshSession.refreshExpiredAt())) {
+            refreshStore.remove(refreshToken);
+            accessStore.remove(refreshSession.accessToken());
+            throw new BusinessException(401, "refresh token expired");
         }
-        return session;
+        return refreshSession;
     }
 
-    private record Session(Long userId, String refreshToken, Instant accessExpiredAt, Instant refreshExpiredAt) {
+    private TokenPair issueTokenPair(Long userId) {
+        String accessToken = UUID.randomUUID().toString();
+        String refreshToken = UUID.randomUUID().toString();
+        Instant now = Instant.now();
+        AccessSession accessSession = new AccessSession(userId, now.plusSeconds(ACCESS_TOKEN_TTL_SECONDS));
+        RefreshSession refreshSession = new RefreshSession(
+                userId,
+                accessToken,
+                now.plusSeconds(REFRESH_TOKEN_TTL_SECONDS)
+        );
+        accessStore.put(accessToken, accessSession);
+        refreshStore.put(refreshToken, refreshSession);
+        return new TokenPair(accessToken, refreshToken);
+    }
+
+    private record AccessSession(Long userId, Instant accessExpiredAt) {
+    }
+
+    private record RefreshSession(Long userId, String accessToken, Instant refreshExpiredAt) {
+    }
+
+    private record TokenPair(String accessToken, String refreshToken) {
     }
 }

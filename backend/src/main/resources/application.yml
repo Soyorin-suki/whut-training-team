@@ -4,7 +4,9 @@ server:
 spring:
   application:
     name: training-backend
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    url: jdbc:sqlite:./data/training.db
 
 codeforces:
   base_url: https://codeforces.com/api
-
