@@ -1,24 +1,31 @@
 package com.whut.training.service.impl;
 
+import com.whut.training.aspect.annotation.ServiceLog;
 import com.whut.training.domain.dto.AdminCreateUserRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.UserRepository;
+import com.whut.training.service.CodeforcesApiService;
 import com.whut.training.service.UserService;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 @Service
+@ServiceLog
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final CodeforcesApiService codeforcesApiService;
 
-    public UserServiceImpl(UserRepository userRepository) {
+    public UserServiceImpl(UserRepository userRepository, CodeforcesApiService codeforcesApiService) {
         this.userRepository = userRepository;
+        this.codeforcesApiService = codeforcesApiService;
     }
 
     @Override
@@ -26,7 +33,26 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BusinessException(400, "username already exists");
         }
-        User user = new User(null, request.getUsername(), request.getEmail(), request.getPassword(), UserRole.USER);
+
+        Optional<CodeforcesApiService.CodeforcesUserProfile> profileOptional =
+                codeforcesApiService.getUserInfo(request.getUsername());
+        if (profileOptional.isEmpty()) {
+            throw new BusinessException(400, "username is not a valid Codeforces handle");
+        }
+
+        User user = new User(
+                null,
+                request.getUsername(),
+                normalizeNullableText(request.getEmail()),
+                request.getPassword(),
+                UserRole.USER,
+                request.getCodeforcesRating(),
+                request.getMaxRating(),
+                request.getOnline(),
+                request.getLastOnlineTimeSeconds(),
+                normalizeNullableText(request.getAvatarUrl())
+        );
+        enrichFromCodeforcesIfNeeded(user, profileOptional.get());
         return userRepository.save(user);
     }
 
@@ -56,5 +82,69 @@ public class UserServiceImpl implements UserService {
     public User getByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(404, "user not found: " + username));
+    }
+
+    private void enrichFromCodeforcesIfNeeded(User user, CodeforcesApiService.CodeforcesUserProfile profile) {
+        boolean needEnrich = user.getCodeforcesRating() == null
+                || user.getMaxRating() == null
+                || user.getOnline() == null
+                || user.getLastOnlineTimeSeconds() == null
+                || user.getAvatarUrl() == null
+                || user.getAvatarUrl().isBlank();
+        if (!needEnrich) {
+            user.setUid(parseUidFromAvatarUrl(user.getAvatarUrl()));
+            return;
+        }
+
+        if (user.getCodeforcesRating() == null) {
+            user.setCodeforcesRating(profile.rating());
+        }
+        if (user.getMaxRating() == null) {
+            user.setMaxRating(profile.maxRating());
+        }
+        if (user.getOnline() == null) {
+            user.setOnline(profile.online());
+        }
+        if (user.getLastOnlineTimeSeconds() == null) {
+            user.setLastOnlineTimeSeconds(profile.lastOnlineTimeSeconds());
+        }
+        if (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) {
+            user.setAvatarUrl(profile.avatarUrl());
+        }
+        user.setUid(parseUidFromAvatarUrl(user.getAvatarUrl()));
+    }
+
+    private String normalizeNullableText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Long parseUidFromAvatarUrl(String avatarUrl) {
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(avatarUrl.trim());
+            String path = uri.getPath();
+            if (path == null || path.isBlank()) {
+                return null;
+            }
+            String[] segments = path.split("/");
+            for (String segment : segments) {
+                if (segment == null || segment.isBlank()) {
+                    continue;
+                }
+                if (segment.chars().allMatch(Character::isDigit)) {
+                    return Long.parseLong(segment);
+                }
+                break;
+            }
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }

@@ -10,16 +10,42 @@ public class User {
     @JsonIgnore
     private String password;
     private UserRole role;
+    private Long uid;
+    private Integer codeforcesRating;
+    private Integer maxRating;
+    private Boolean online;
+    private Long lastOnlineTimeSeconds;
+    private String avatarUrl;
 
     public User() {
     }
 
     public User(Long id, String username, String email, String password, UserRole role) {
+        this(id, username, email, password, role, null, null, null, null, null);
+    }
+
+    public User(Long id, String username, String email, String password, UserRole role, Integer codeforcesRating, Integer maxRating) {
+        this(id, username, email, password, role, codeforcesRating, maxRating, null, null, null);
+    }
+
+    public User(Long id, String username, String email, String password, UserRole role, Integer codeforcesRating, Integer maxRating,
+                Boolean online, Long lastOnlineTimeSeconds, String avatarUrl) {
+        this(id, username, email, password, role, codeforcesRating, maxRating, online, lastOnlineTimeSeconds, avatarUrl, null);
+    }
+
+    public User(Long id, String username, String email, String password, UserRole role, Integer codeforcesRating, Integer maxRating,
+                Boolean online, Long lastOnlineTimeSeconds, String avatarUrl, Long uid) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
         this.role = role;
+        this.uid = uid;
+        this.codeforcesRating = codeforcesRating;
+        this.maxRating = maxRating;
+        this.online = online;
+        this.lastOnlineTimeSeconds = lastOnlineTimeSeconds;
+        this.avatarUrl = avatarUrl;
     }
 
     public Long getId() {
@@ -60,5 +86,53 @@ public class User {
 
     public void setRole(UserRole role) {
         this.role = role;
+    }
+
+    public Long getUid() {
+        return uid;
+    }
+
+    public void setUid(Long uid) {
+        this.uid = uid;
+    }
+
+    public Integer getCodeforcesRating() {
+        return codeforcesRating;
+    }
+
+    public void setCodeforcesRating(Integer codeforcesRating) {
+        this.codeforcesRating = codeforcesRating;
+    }
+
+    public Integer getMaxRating() {
+        return maxRating;
+    }
+
+    public void setMaxRating(Integer maxRating) {
+        this.maxRating = maxRating;
+    }
+
+    public Boolean getOnline() {
+        return online;
+    }
+
+    public void setOnline(Boolean online) {
+        this.online = online;
+    }
+
+    public Long getLastOnlineTimeSeconds() {
+        return lastOnlineTimeSeconds;
+    }
+
+    public void setLastOnlineTimeSeconds(Long lastOnlineTimeSeconds) {
+        this.lastOnlineTimeSeconds = lastOnlineTimeSeconds;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 }

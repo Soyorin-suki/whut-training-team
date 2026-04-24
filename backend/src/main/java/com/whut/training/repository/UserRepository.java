@@ -18,7 +18,13 @@ public class UserRepository {
             rs.getString("username"),
             rs.getString("email"),
             rs.getString("password"),
-            UserRole.valueOf(rs.getString("role"))
+            parseRole(rs.getString("role")),
+            (Integer) rs.getObject("codeforces_rating"),
+            (Integer) rs.getObject("max_rating"),
+            parseOnline(rs.getObject("is_online")),
+            parseLongValue(rs.getObject("last_online_time_seconds")),
+            rs.getString("avatar_url"),
+            parseLongValue(rs.getObject("uid"))
     );
 
     public UserRepository(JdbcTemplate jdbcTemplate) {
@@ -28,11 +34,17 @@ public class UserRepository {
     public User save(User user) {
         if (user.getId() == null) {
             jdbcTemplate.update(
-                    "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     user.getUsername(),
                     user.getEmail(),
                     user.getPassword(),
-                    user.getRole().name()
+                    user.getRole() == null ? null : user.getRole().name(),
+                    user.getUid(),
+                    user.getCodeforcesRating(),
+                    user.getMaxRating(),
+                    user.getOnline(),
+                    user.getLastOnlineTimeSeconds(),
+                    user.getAvatarUrl()
             );
             Long id = jdbcTemplate.queryForObject(
                     "SELECT id FROM users WHERE username = ?",
@@ -44,23 +56,29 @@ public class UserRepository {
         }
 
         jdbcTemplate.update(
-                "UPDATE users SET username = ?, email = ?, password = ?, role = ? WHERE id = ?",
+                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ? WHERE id = ?",
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
-                user.getRole().name(),
+                user.getRole() == null ? null : user.getRole().name(),
+                user.getUid(),
+                user.getCodeforcesRating(),
+                user.getMaxRating(),
+                user.getOnline(),
+                user.getLastOnlineTimeSeconds(),
+                user.getAvatarUrl(),
                 user.getId()
         );
         return user;
     }
 
     public List<User> findAll() {
-        return jdbcTemplate.query("SELECT id, username, email, password, role FROM users", userRowMapper);
+        return jdbcTemplate.query("SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url FROM users", userRowMapper);
     }
 
     public Optional<User> findById(Long id) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role FROM users WHERE id = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url FROM users WHERE id = ?",
                 userRowMapper,
                 id
         );
@@ -69,7 +87,7 @@ public class UserRepository {
 
     public Optional<User> findByUsername(String username) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role FROM users WHERE username = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url FROM users WHERE username = ?",
                 userRowMapper,
                 username
         );
@@ -83,5 +101,35 @@ public class UserRepository {
                 username
         );
         return count != null && count > 0;
+    }
+
+    private UserRole parseRole(String roleText) {
+        if (roleText == null || roleText.isBlank()) {
+            return null;
+        }
+        return UserRole.valueOf(roleText);
+    }
+
+    private Boolean parseOnline(Object rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        if (rawValue instanceof Boolean value) {
+            return value;
+        }
+        if (rawValue instanceof Number value) {
+            return value.intValue() != 0;
+        }
+        return Boolean.parseBoolean(rawValue.toString());
+    }
+
+    private Long parseLongValue(Object rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        if (rawValue instanceof Number value) {
+            return value.longValue();
+        }
+        return Long.parseLong(rawValue.toString());
     }
 }

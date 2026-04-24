@@ -6,7 +6,17 @@ spring:
     name: training-backend
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:./data/training.db
+    url: jdbc:sqlite:C:/Users/29768/Desktop/whut-training-team/backend/data/training.db
 
 codeforces:
   base_url: https://codeforces.com/api
+
+app:
+  logging:
+    service:
+      enabled: true
+
+logging:
+  level:
+    com.whut.training.interceptor.RequestLoggingInterceptor: INFO
+    com.whut.training.aspect.logging.ServiceLogAspect: INFO
