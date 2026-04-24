@@ -5,3 +5,6 @@ spring:
   application:
     name: training-backend
 
+codeforces:
+  base_url: https://codeforces.com/api
+
