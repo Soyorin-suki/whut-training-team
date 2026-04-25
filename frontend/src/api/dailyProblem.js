@@ -50,14 +50,6 @@ export async function checkPractice(drawId, submissionId, tokens) {
   return res.data;
 }
 
-export async function getPracticeHistory(tokens, limit = 30) {
-  const res = await http.get("/api/practice/history", {
-    headers: authHeaders(tokens),
-    params: { limit }
-  });
-  return res.data;
-}
-
 export async function regenerateTodayByAdmin(tokens) {
   const res = await http.post(
     "/api/admin/daily-problem/regenerate",

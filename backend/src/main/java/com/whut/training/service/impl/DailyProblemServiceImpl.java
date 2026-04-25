@@ -5,7 +5,6 @@ import com.whut.training.domain.dto.*;
 import com.whut.training.domain.entity.CfProblem;
 import com.whut.training.domain.entity.DailyProblem;
 import com.whut.training.domain.entity.User;
-import com.whut.training.domain.entity.UserDailyStatus;
 import com.whut.training.domain.entity.UserPracticeDraw;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
@@ -17,9 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -107,52 +104,20 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         for (LocalDate date = startDate; !date.isAfter(today); date = date.plusDays(1)) {
             ensureDailyProblem(date, false, "api");
         }
-        List<DailyProblem> problems = dailyProblemRepository.findDailyProblemsByDateRange(startDate, today);
-        Map<LocalDate, UserDailyStatus> statusByDate = dailyProblemRepository.findUserDailyStatusByDateRange(
-                user.getId(),
-                startDate,
-                today
-        );
-        return problems.stream()
-                .map(problem -> {
-                    UserDailyStatus status = statusByDate.get(problem.date());
-                    return new DailyProblemHistoryItem(
-                            problem.date().toString(),
-                            problem.problemKey(),
-                            problem.name(),
-                            problem.rating(),
-                            problem.sourceUrl(),
-                            status != null,
-                            status == null ? null : status.submissionId(),
-                            status == null ? null : status.verdict(),
-                            status == null ? null : status.score()
-                    );
-                })
-                .toList();
+        return dailyProblemRepository.findDailyHistoryForUser(user.getId(), startDate, today);
     }
 
     @Override
-    public List<PracticeHistoryItem> getPracticeHistory(User user, int limit) {
-        return dailyProblemRepository.findCheckedPracticeHistory(user.getId(), limit);
-    }
-
-    @Override
-    public PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating, String tags) {
+    public PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating) {
         ensureProblemPoolAvailable();
         int resolvedMinRating = minRating == null ? defaultMinRating : minRating;
         int resolvedMaxRating = maxRating == null ? defaultMaxRating : maxRating;
         if (resolvedMinRating > resolvedMaxRating) {
             throw new BusinessException(400, "invalid rating range");
         }
-        List<String> tagFilters = parseTagFilters(tags);
 
-        CfProblem problem = dailyProblemRepository.findRandomProblem(resolvedMinRating, resolvedMaxRating, tagFilters)
-                .orElseThrow(() -> new BusinessException(
-                        404,
-                        tagFilters.isEmpty()
-                                ? "no problem available for this rating range"
-                                : "no problem available for this rating range and tags: " + String.join(",", tagFilters)
-                ));
+        CfProblem problem = dailyProblemRepository.findRandomProblem(resolvedMinRating, resolvedMaxRating)
+                .orElseThrow(() -> new BusinessException(404, "no problem available for this rating range"));
         UserPracticeDraw draw = dailyProblemRepository.insertPracticeDraw(user.getId(), LocalDate.now(), problem);
         return new PracticeDrawResponse(
                 draw.id(),
@@ -168,19 +133,6 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                         draw.sourceUrl()
                 )
         );
-    }
-
-    private List<String> parseTagFilters(String tags) {
-        if (tags == null || tags.isBlank()) {
-            return List.of();
-        }
-        return Arrays.stream(tags.split(","))
-                .map(String::trim)
-                .filter(tag -> !tag.isEmpty())
-                .map(String::toLowerCase)
-                .distinct()
-                .limit(10)
-                .toList();
     }
 
     @Override

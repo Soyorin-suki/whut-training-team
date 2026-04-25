@@ -12,9 +12,7 @@ public interface DailyProblemService {
 
     List<DailyProblemHistoryItem> getHistory(User user, int limit);
 
-    List<PracticeHistoryItem> getPracticeHistory(User user, int limit);
-
-    PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating, String tags);
+    PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating);
 
     CheckInResultResponse checkPractice(User user, Long drawId, Long submissionId);
 
