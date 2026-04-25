@@ -15,7 +15,7 @@
 | max_rating | INTEGER | NULL | CF 历史最高 rating |
 | is_online | INTEGER | NULL | 在线状态（0/1） |
 | last_online_time_seconds | INTEGER | NULL | 最近在线时间（Unix 秒） |
-| avatar_url | TEXT | NULL | 头像地址（支持本地上传 URL） |
+| avatar_url | TEXT | NULL | 头像地址 |
 
 ## 2) `cf_problem`（Codeforces 题库缓存）
 | 字段名 | 类型 | 约束 | 说明 |

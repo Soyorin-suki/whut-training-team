@@ -242,7 +242,7 @@ public class DailyProblemRepository {
         );
     }
 
-    public List<DailyProblemHistoryItem> findDailyHistoryForUser(Long userId, int limit) {
+    public List<DailyProblemHistoryItem> findDailyHistoryForUser(Long userId, LocalDate startDate, LocalDate endDate) {
         return jdbcTemplate.query(
                 """
                         SELECT d.date,
@@ -256,8 +256,8 @@ public class DailyProblemRepository {
                         FROM daily_problem d
                         LEFT JOIN user_daily_status s
                             ON s.user_id = ? AND s.date = d.date
+                        WHERE d.date BETWEEN ? AND ?
                         ORDER BY d.date DESC
-                        LIMIT ?
                         """,
                 (rs, rowNum) -> new DailyProblemHistoryItem(
                         rs.getString("date"),
@@ -271,7 +271,8 @@ public class DailyProblemRepository {
                         (Integer) rs.getObject("score")
                 ),
                 userId,
-                limit
+                startDate.toString(),
+                endDate.toString()
         );
     }
 
