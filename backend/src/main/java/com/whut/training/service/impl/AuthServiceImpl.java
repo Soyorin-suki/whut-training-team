@@ -6,27 +6,46 @@ import com.whut.training.domain.dto.LoginResponse;
 import com.whut.training.domain.dto.RefreshTokenResponse;
 import com.whut.training.domain.entity.User;
 import com.whut.training.exception.BusinessException;
+import com.whut.training.repository.AuthTokenSessionRepository;
+import com.whut.training.repository.AuthTokenSessionRepository.AuthTokenSession;
+import com.whut.training.repository.UserRepository;
 import com.whut.training.service.AuthService;
+import com.whut.training.service.CodeforcesApiService;
 import com.whut.training.service.UserService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @ServiceLog
 public class AuthServiceImpl implements AuthService {
 
-    private static final long ACCESS_TOKEN_TTL_SECONDS = 30 * 60;
-    private static final long REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+    private final long accessTokenTtlSeconds;
+    private final long refreshTokenTtlSeconds;
 
     private final UserService userService;
-    private final ConcurrentHashMap<String, AccessSession> accessStore = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, RefreshSession> refreshStore = new ConcurrentHashMap<>();
+    private final CodeforcesApiService codeforcesApiService;
+    private final UserRepository userRepository;
+    private final AuthTokenSessionRepository authTokenSessionRepository;
 
-    public AuthServiceImpl(UserService userService) {
+    public AuthServiceImpl(
+            UserService userService,
+            CodeforcesApiService codeforcesApiService,
+            UserRepository userRepository,
+            AuthTokenSessionRepository authTokenSessionRepository,
+            @Value("${app.auth.access-token-ttl-seconds:1800}") long accessTokenTtlSeconds,
+            @Value("${app.auth.refresh-token-ttl-seconds:604800}") long refreshTokenTtlSeconds
+    ) {
         this.userService = userService;
+        this.codeforcesApiService = codeforcesApiService;
+        this.userRepository = userRepository;
+        this.authTokenSessionRepository = authTokenSessionRepository;
+        this.accessTokenTtlSeconds = accessTokenTtlSeconds;
+        this.refreshTokenTtlSeconds = refreshTokenTtlSeconds;
     }
 
     @Override
@@ -40,6 +59,7 @@ public class AuthServiceImpl implements AuthService {
         if (!user.getPassword().equals(request.getPassword())) {
             throw new BusinessException(401, "invalid username or password");
         }
+        syncAvatarFromCodeforcesOnLogin(user);
 
         TokenPair pair = issueTokenPair(user.getId());
 
@@ -61,9 +81,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public RefreshTokenResponse refresh(String refreshToken) {
-        RefreshSession refreshSession = validateRefreshSession(refreshToken);
-        accessStore.remove(refreshSession.accessToken());
-        refreshStore.remove(refreshToken);
+        AuthTokenSession refreshSession = validateRefreshSession(refreshToken);
+        authTokenSessionRepository.deleteByRefreshToken(refreshToken);
+        authTokenSessionRepository.deleteByAccessToken(refreshSession.accessToken());
 
         TokenPair nextPair = issueTokenPair(refreshSession.userId());
         return new RefreshTokenResponse(nextPair.accessToken(), nextPair.refreshToken());
@@ -75,74 +95,125 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(401, "invalid refresh token");
         }
 
-        RefreshSession refreshSession = refreshStore.remove(refreshToken);
+        AuthTokenSession refreshSession = authTokenSessionRepository.findByRefreshToken(refreshToken).orElse(null);
         if (refreshSession == null) {
             throw new BusinessException(401, "invalid refresh token");
         }
 
-        accessStore.remove(refreshSession.accessToken());
+        authTokenSessionRepository.deleteByRefreshToken(refreshToken);
+        authTokenSessionRepository.deleteByAccessToken(refreshSession.accessToken());
         if (accessToken != null && !accessToken.isBlank()) {
-            accessStore.remove(accessToken);
+            authTokenSessionRepository.deleteByAccessToken(accessToken);
         }
     }
 
     @Override
     public User validateAccessTokenAndGetUser(String accessToken) {
-        AccessSession accessSession = validateAccessSession(accessToken);
+        AuthTokenSession accessSession = validateAccessSession(accessToken);
         return userService.getById(accessSession.userId());
     }
 
-    private AccessSession validateAccessSession(String accessToken) {
-        AccessSession accessSession = accessStore.get(accessToken);
-        if (accessSession == null) {
+    private AuthTokenSession validateAccessSession(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
             throw new BusinessException(401, "invalid access token");
         }
+        AuthTokenSession accessSession = authTokenSessionRepository.findByAccessToken(accessToken)
+                .orElseThrow(() -> new BusinessException(401, "invalid access token"));
         Instant now = Instant.now();
-        if (now.isAfter(accessSession.accessExpiredAt())) {
-            accessStore.remove(accessToken);
+        long nowSeconds = now.getEpochSecond();
+        if (nowSeconds >= accessSession.accessExpiredAtSeconds()) {
+            authTokenSessionRepository.deleteByAccessToken(accessToken);
             throw new BusinessException(401, "access token expired");
         }
         return accessSession;
     }
 
-    private RefreshSession validateRefreshSession(String refreshToken) {
+    private AuthTokenSession validateRefreshSession(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BusinessException(401, "invalid refresh token");
         }
 
-        RefreshSession refreshSession = refreshStore.get(refreshToken);
-        if (refreshSession == null) {
-            throw new BusinessException(401, "invalid refresh token");
-        }
+        AuthTokenSession refreshSession = authTokenSessionRepository.findByRefreshToken(refreshToken)
+                .orElseThrow(() -> new BusinessException(401, "invalid refresh token"));
 
         Instant now = Instant.now();
-        if (now.isAfter(refreshSession.refreshExpiredAt())) {
-            refreshStore.remove(refreshToken);
-            accessStore.remove(refreshSession.accessToken());
+        long nowSeconds = now.getEpochSecond();
+        if (nowSeconds >= refreshSession.refreshExpiredAtSeconds()) {
+            authTokenSessionRepository.deleteByRefreshToken(refreshToken);
+            authTokenSessionRepository.deleteByAccessToken(refreshSession.accessToken());
             throw new BusinessException(401, "refresh token expired");
         }
         return refreshSession;
     }
 
     private TokenPair issueTokenPair(Long userId) {
+        authTokenSessionRepository.deleteExpiredBefore(Instant.now().getEpochSecond());
+
         String accessToken = UUID.randomUUID().toString();
         String refreshToken = UUID.randomUUID().toString();
         Instant now = Instant.now();
-        AccessSession accessSession = new AccessSession(userId, now.plusSeconds(ACCESS_TOKEN_TTL_SECONDS));
-        RefreshSession refreshSession = new RefreshSession(
+        AuthTokenSession session = new AuthTokenSession(
                 userId,
                 accessToken,
-                now.plusSeconds(REFRESH_TOKEN_TTL_SECONDS)
+                refreshToken,
+                now.plusSeconds(accessTokenTtlSeconds).getEpochSecond(),
+                now.plusSeconds(refreshTokenTtlSeconds).getEpochSecond()
         );
-        accessStore.put(accessToken, accessSession);
-        refreshStore.put(refreshToken, refreshSession);
+        try {
+            authTokenSessionRepository.save(session);
+        } catch (DataAccessException ex) {
+            throw new BusinessException(500, "failed to issue token");
+        }
         return new TokenPair(accessToken, refreshToken);
     }
 
-    private record AccessSession(Long userId, Instant accessExpiredAt) {
+    private void syncAvatarFromCodeforcesOnLogin(User user) {
+        if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
+            return;
+        }
+        codeforcesApiService.getUserInfo(user.getUsername()).ifPresent(profile -> {
+            String latestAvatarUrl = profile.avatarUrl();
+            Long latestUid = parseUidFromAvatarUrl(latestAvatarUrl);
+            boolean changed = false;
+
+            if (latestAvatarUrl != null && !latestAvatarUrl.isBlank() && !latestAvatarUrl.equals(user.getAvatarUrl())) {
+                user.setAvatarUrl(latestAvatarUrl);
+                changed = true;
+            }
+            if (latestUid != null && !latestUid.equals(user.getUid())) {
+                user.setUid(latestUid);
+                changed = true;
+            }
+            if (changed) {
+                userRepository.save(user);
+            }
+        });
     }
 
-    private record RefreshSession(Long userId, String accessToken, Instant refreshExpiredAt) {
+    private Long parseUidFromAvatarUrl(String avatarUrl) {
+        if (avatarUrl == null || avatarUrl.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(avatarUrl.trim());
+            String path = uri.getPath();
+            if (path == null || path.isBlank()) {
+                return null;
+            }
+            String[] segments = path.split("/");
+            for (String segment : segments) {
+                if (segment == null || segment.isBlank()) {
+                    continue;
+                }
+                if (segment.chars().allMatch(Character::isDigit)) {
+                    return Long.parseLong(segment);
+                }
+                break;
+            }
+            return null;
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private record TokenPair(String accessToken, String refreshToken) {

@@ -8,17 +8,12 @@ const REGISTER = "register";
 export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigate }) {
   const [page, setPage] = useState(initialPage);
   const [message, setMessage] = useState("");
-  const [loginForm, setLoginForm] = useState({
-    username: "",
-    password: ""
-  });
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [registerForm, setRegisterForm] = useState({
     username: "",
     password: "",
     confirmPassword: "",
-    qq: "",
-    email: "",
-    realName: ""
+    email: ""
   });
 
   useEffect(() => {
@@ -35,7 +30,6 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
         username: loginForm.username.trim(),
         password: loginForm.password
       });
-
       if (resp.code !== 200) {
         setMessage(resp.message || "登录失败");
         return;
@@ -43,10 +37,9 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
 
       const auth = buildAuthFromLogin(resp.data);
       if (!auth) {
-        setMessage("登录成功，但未获取到完整凭证");
+        setMessage("登录成功，但凭证不完整");
         return;
       }
-
       onAuthSuccess?.(auth);
     } catch (error) {
       setMessage(error.response?.data?.message || "登录请求失败");
@@ -60,39 +53,24 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
     const username = registerForm.username.trim();
     const password = registerForm.password;
     const confirmPassword = registerForm.confirmPassword;
-    const qq = registerForm.qq.trim();
-    const email = registerForm.email.trim();
-    const realName = registerForm.realName.trim();
+    const email = registerForm.email.trim() || `${username}@whut.local`;
 
     if (password !== confirmPassword) {
       setMessage("两次输入的密码不一致");
       return;
     }
 
-    const payload = { username, password };
-    if (qq) payload.qq = qq;
-    if (realName) payload.name = realName;
-    payload.email = email || `${username}@whut.local`;
-
     try {
-      const resp = await registerUser(payload);
+      const resp = await registerUser({ username, password, email });
       if (resp.code !== 200) {
         setMessage(resp.message || "注册失败");
         return;
       }
-
       setMessage("注册成功，请登录");
       setPage(LOGIN);
       onNavigate?.(LOGIN);
-      setLoginForm((prev) => ({ ...prev, username, password: "" }));
-      setRegisterForm({
-        username: "",
-        password: "",
-        confirmPassword: "",
-        qq: "",
-        email: "",
-        realName: ""
-      });
+      setLoginForm({ username, password: "" });
+      setRegisterForm({ username: "", password: "", confirmPassword: "", email: "" });
     } catch (error) {
       setMessage(error.response?.data?.message || "注册请求失败");
     }
@@ -118,7 +96,7 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
               onChange={(event) =>
                 setLoginForm((prev) => ({ ...prev, username: event.target.value }))
               }
-              placeholder="用户名"
+              placeholder="Codeforces 用户名"
               required
             />
             <input
@@ -143,7 +121,7 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
               onChange={(event) =>
                 setRegisterForm((prev) => ({ ...prev, username: event.target.value }))
               }
-              placeholder="用户名（必填）"
+              placeholder="Codeforces 用户名"
               required
             />
             <input
@@ -168,28 +146,12 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
             />
             <input
               className="auth-input"
-              value={registerForm.qq}
-              onChange={(event) =>
-                setRegisterForm((prev) => ({ ...prev, qq: event.target.value }))
-              }
-              placeholder="QQ（选填）"
-            />
-            <input
-              className="auth-input"
               value={registerForm.email}
               onChange={(event) =>
                 setRegisterForm((prev) => ({ ...prev, email: event.target.value }))
               }
               type="email"
               placeholder="邮箱（选填）"
-            />
-            <input
-              className="auth-input"
-              value={registerForm.realName}
-              onChange={(event) =>
-                setRegisterForm((prev) => ({ ...prev, realName: event.target.value }))
-              }
-              placeholder="真实姓名（选填）"
             />
             <button className="auth-button" type="submit">
               注册

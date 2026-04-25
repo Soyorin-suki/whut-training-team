@@ -1,8 +1,11 @@
 package com.whut.training.controller;
 
 import com.whut.training.common.ApiResponse;
+import com.whut.training.context.UserContext;
+import com.whut.training.domain.dto.UserUpdateRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
+import com.whut.training.exception.BusinessException;
 import com.whut.training.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -32,5 +35,14 @@ public class UserController {
     @GetMapping("/{id}")
     public ApiResponse<User> getById(@PathVariable Long id) {
         return ApiResponse.ok(userService.getById(id));
+    }
+
+    @PatchMapping("/me")
+    public ApiResponse<User> updateMe(@RequestBody(required = false) UserUpdateRequest request) {
+        User currentUser = UserContext.getCurrentUser();
+        if (currentUser == null) {
+            throw new BusinessException(401, "unauthorized");
+        }
+        return ApiResponse.ok(userService.updateProfile(currentUser.getId(), request));
     }
 }

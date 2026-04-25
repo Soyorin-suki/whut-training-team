@@ -26,7 +26,7 @@ import java.util.Map;
 @ConditionalOnProperty(prefix = "app.logging.service", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class ServiceLogAspect {
 
-    private static final Logger log = LoggerFactory.getLogger(ServiceLogAspect.class);
+    private static final Logger logger = LoggerFactory.getLogger(ServiceLogAspect.class);
     private static final int MAX_LOG_STRING_LENGTH = 120;
     private static final int MAX_FIELDS = 10;
 
@@ -52,16 +52,16 @@ public class ServiceLogAspect {
         String methodName = ((MethodSignature) joinPoint.getSignature()).getMethod().getName();
         String argsInfo = buildArgsInfo(joinPoint.getArgs());
 
-        log.info("service_start service={}.{} request={} args={}", className, methodName, requestInfo, argsInfo);
+        logger.info("service_start service={}.{} request={} args={}", className, methodName, requestInfo, argsInfo);
 
         try {
             Object result = joinPoint.proceed();
             long durationMs = (System.nanoTime() - startNs) / 1_000_000;
-            log.info("service_end service={}.{} request={} durationMs={}", className, methodName, requestInfo, durationMs);
+            logger.info("service_end service={}.{} request={} durationMs={}", className, methodName, requestInfo, durationMs);
             return result;
         } catch (Exception ex) {
             long durationMs = (System.nanoTime() - startNs) / 1_000_000;
-            log.warn("service_error service={}.{} request={} durationMs={} exception={}",
+            logger.warn("service_error service={}.{} request={} durationMs={} exception={}",
                     className, methodName, requestInfo, durationMs, ex.getClass().getSimpleName());
             throw ex;
         }
