@@ -72,7 +72,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         LocalDate today = LocalDate.now();
         DailyProblem dailyProblem = ensureDailyProblem(today, false, "api");
         if (dailyProblemRepository.findUserDailyStatus(user.getId(), today).isPresent()) {
-            throw new BusinessException(409, "today already checked in");
+            throw new BusinessException(409, "今日已打卡，请勿重复提交");
         }
 
         CodeforcesApiService.SubmissionStatus submissionStatus = verifySubmission(
@@ -82,7 +82,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 dailyProblem.problemIndex()
         );
         if (!"OK".equalsIgnoreCase(submissionStatus.verdict())) {
-            throw new BusinessException(400, "submission is not accepted");
+            throw new BusinessException(400, "提交未通过，判题结果为 " + submissionStatus.verdict());
         }
 
         dailyProblemRepository.saveUserDailyStatus(
@@ -97,9 +97,14 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
     @Override
     public List<DailyProblemHistoryItem> getHistory(User user, int limit) {
-        ensureDailyProblem(LocalDate.now(), false, "api");
-        int safeLimit = Math.max(1, Math.min(60, limit));
-        return dailyProblemRepository.findDailyHistoryForUser(user.getId(), safeLimit);
+        LocalDate today = LocalDate.now();
+        ensureDailyProblem(today, false, "api");
+        int safeDays = Math.max(1, Math.min(60, limit));
+        LocalDate startDate = today.minusDays(safeDays - 1L);
+        for (LocalDate date = startDate; !date.isAfter(today); date = date.plusDays(1)) {
+            ensureDailyProblem(date, false, "api");
+        }
+        return dailyProblemRepository.findDailyHistoryForUser(user.getId(), startDate, today);
     }
 
     @Override
@@ -199,11 +204,20 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                                                                    String problemIndex) {
         CodeforcesApiService.SubmissionStatus submissionStatus = codeforcesApiService
                 .getSubmissionStatus(handle, submissionId)
-                .orElseThrow(() -> new BusinessException(400, "submission not found for this user"));
+                .orElseThrow(() -> new BusinessException(
+                        400,
+                        "非该用户提交记录，或提交ID不存在（submissionId=" + submissionId + "）"
+                ));
         boolean sameProblem = contestId.equals(submissionStatus.contestId())
                 && problemIndex.equalsIgnoreCase(submissionStatus.problemIndex());
         if (!sameProblem) {
-            throw new BusinessException(400, "submission does not match target problem");
+            throw new BusinessException(
+                    400,
+                    "非对应题目提交，期望题目为 "
+                            + contestId + problemIndex
+                            + "，实际为 "
+                            + submissionStatus.contestId() + submissionStatus.problemIndex()
+            );
         }
         return submissionStatus;
     }

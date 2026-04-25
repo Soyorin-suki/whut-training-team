@@ -1,5 +1,7 @@
 package com.whut.training.interceptor;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whut.training.common.ApiResponse;
 import com.whut.training.context.UserContext;
 import com.whut.training.domain.entity.User;
 import com.whut.training.exception.BusinessException;
@@ -15,9 +17,11 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AccessTokenInterceptor implements HandlerInterceptor {
 
     private final AuthService authService;
+    private final ObjectMapper objectMapper;
 
-    public AccessTokenInterceptor(AuthService authService) {
+    public AccessTokenInterceptor(AuthService authService, ObjectMapper objectMapper) {
         this.authService = authService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -34,6 +38,14 @@ public class AccessTokenInterceptor implements HandlerInterceptor {
         } catch (BusinessException ex) {
             if (ex.getCode() == 401) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                try {
+                    response.getWriter().write(
+                            objectMapper.writeValueAsString(ApiResponse.fail(401, ex.getMessage()))
+                    );
+                } catch (Exception ignore) {
+                    // best effort
+                }
                 return false;
             }
             throw ex;

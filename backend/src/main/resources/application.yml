@@ -20,10 +20,10 @@ app:
     refresh-token-ttl-seconds: 604800
   daily-problem:
     min-rating: 1200
-    max-rating: 1600
+    max-rating: 2000
     no-repeat-days: 90
     cron: "0 5 0 * * *"
-    sync-cron: "0 0 */6 * * *"
+    sync-cron: "0 0 0 * * MON"
     zone: "Asia/Shanghai"
 
 logging:

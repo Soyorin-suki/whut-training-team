@@ -169,7 +169,10 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
       if (resp.code !== 200) {
         setMessage(resp.message || "打卡失败");
       } else {
-        setMessage("打卡成功，积分 +1");
+        const result = resp.data || {};
+        setMessage(
+          `打卡成功：submissionId=${result.submissionId ?? "-"}，verdict=${result.verdict ?? "-"}，score=+${result.score ?? 0}`
+        );
         setDailySubmissionId("");
         await loadDailyPanel();
       }
@@ -408,7 +411,9 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                     </div>
                     <div>
                       {item.checkedIn ? (
-                        <span className="history-ok">已打卡（+{item.score ?? 0}）</span>
+                        <span className="history-ok">
+                          已打卡（submissionId={item.submissionId ?? "-"}，verdict={item.verdict || "-"}，+{item.score ?? 0}）
+                        </span>
                       ) : (
                         <span className="history-pending">未打卡</span>
                       )}

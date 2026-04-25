@@ -18,6 +18,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, HttpMessageNotReadableException.class, MissingRequestHeaderException.class})
     public ApiResponse<Void> handleBadRequest(Exception ex) {
+        if (ex instanceof MethodArgumentNotValidException manv
+                && manv.getBindingResult().getFieldError() != null) {
+            return ApiResponse.fail(400, manv.getBindingResult().getFieldError().getDefaultMessage());
+        }
+        if (ex instanceof BindException be
+                && be.getBindingResult().getFieldError() != null) {
+            return ApiResponse.fail(400, be.getBindingResult().getFieldError().getDefaultMessage());
+        }
+        if (ex instanceof MissingRequestHeaderException mrh) {
+            return ApiResponse.fail(400, "missing required header: " + mrh.getHeaderName());
+        }
+        if (ex instanceof HttpMessageNotReadableException) {
+            return ApiResponse.fail(400, "request body is invalid or missing");
+        }
         return ApiResponse.fail(400, "invalid request");
     }
 
