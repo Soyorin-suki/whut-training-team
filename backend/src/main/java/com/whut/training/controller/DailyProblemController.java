@@ -36,11 +36,17 @@ public class DailyProblemController {
         return ApiResponse.ok(dailyProblemService.getHistory(requireCurrentUser(), limit));
     }
 
+    @GetMapping("/practice/history")
+    public ApiResponse<List<PracticeHistoryItem>> practiceHistory(@RequestParam(defaultValue = "30") int limit) {
+        return ApiResponse.ok(dailyProblemService.getPracticeHistory(requireCurrentUser(), limit));
+    }
+
     @PostMapping("/practice/draw")
     public ApiResponse<PracticeDrawResponse> draw(@RequestBody(required = false) PracticeDrawRequest request) {
         Integer minRating = request == null ? null : request.minRating();
         Integer maxRating = request == null ? null : request.maxRating();
-        return ApiResponse.ok(dailyProblemService.drawPracticeProblem(requireCurrentUser(), minRating, maxRating));
+        String tags = request == null ? null : request.tags();
+        return ApiResponse.ok(dailyProblemService.drawPracticeProblem(requireCurrentUser(), minRating, maxRating, tags));
     }
 
     @PostMapping("/practice/check")
