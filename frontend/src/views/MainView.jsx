@@ -6,13 +6,29 @@ import {
   checkPractice,
   drawPracticeProblem,
   getDailyHistory,
+  getPracticeHistory,
   getTodayProblem,
   regenerateTodayByAdmin
 } from "../api/dailyProblem";
 
+const PRACTICE_TAG_OPTIONS = [
+  "implementation",
+  "greedy",
+  "math",
+  "dp",
+  "graphs",
+  "data structures",
+  "brute force",
+  "constructive algorithms",
+  "sortings",
+  "binary search",
+  "strings",
+  "number theory"
+];
+
 const NAV_ITEMS = [
   { key: "daily", label: "每日一题" },
-  { key: "practice", label: "自主抽题" },
+  { key: "practice", label: "自主练习" },
   { key: "profile", label: "个人信息" }
 ];
 
@@ -81,8 +97,12 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
 
   const [practiceMinRating, setPracticeMinRating] = useState(1200);
   const [practiceMaxRating, setPracticeMaxRating] = useState(1600);
+  const [practiceTags, setPracticeTags] = useState("");
+  const [selectedPracticeTag, setSelectedPracticeTag] = useState(PRACTICE_TAG_OPTIONS[0]);
+  const [isDrawingPractice, setIsDrawingPractice] = useState(false);
   const [practiceDraw, setPracticeDraw] = useState(null);
   const [practiceSubmissionId, setPracticeSubmissionId] = useState("");
+  const [practiceHistory, setPracticeHistory] = useState([]);
 
   const [profileUsername, setProfileUsername] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
@@ -138,12 +158,32 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
     }
   }
 
+  async function loadPracticeHistory() {
+    if (!tokens) return;
+    try {
+      const historyResp = await getPracticeHistory(tokens, 30);
+      if (historyResp.code === 200) {
+        setPracticeHistory(historyResp.data || []);
+      }
+    } catch {
+      // ignore practice history loading errors
+    }
+  }
+
   useEffect(() => {
     if (user) {
       loadDailyPanel();
+      loadPracticeHistory();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useEffect(() => {
+    if (activeNav === "practice" && user) {
+      loadPracticeHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNav, user?.id]);
 
   async function handleLogout() {
     try {
@@ -203,11 +243,15 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
   }
 
   async function handleDrawPractice() {
-    setLoading(true);
-    setMessage("");
+    if (isDrawingPractice) return;
+    setIsDrawingPractice(true);
     try {
       const resp = await drawPracticeProblem(
-        { minRating: Number(practiceMinRating), maxRating: Number(practiceMaxRating) },
+        {
+          minRating: Number(practiceMinRating),
+          maxRating: Number(practiceMaxRating),
+          tags: practiceTags.trim() || null
+        },
         tokens
       );
       if (resp.code !== 200) {
@@ -216,11 +260,31 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
       }
       setPracticeDraw(resp.data);
       setPracticeSubmissionId("");
+      setMessage("");
     } catch (error) {
       setMessage(error.response?.data?.message || "抽题请求失败");
     } finally {
-      setLoading(false);
+      setIsDrawingPractice(false);
     }
+  }
+
+  function handleAddPresetTag() {
+    if (!selectedPracticeTag) return;
+    const currentTags = practiceTags
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (currentTags.some((tag) => tag.toLowerCase() === selectedPracticeTag.toLowerCase())) {
+      return;
+    }
+    setPracticeTags(currentTags.length > 0 ? `${currentTags.join(",")},${selectedPracticeTag}` : selectedPracticeTag);
+  }
+
+  function normalizeToHundreds(value) {
+    if (value === null || value === undefined || String(value).trim() === "") return "";
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "";
+    return Math.round(n / 100) * 100;
   }
 
   async function handlePracticeCheck() {
@@ -241,6 +305,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
         return;
       }
       if (resp.data?.accepted) {
+        await loadPracticeHistory();
         setMessage("练习题通过（不计分）");
       } else {
         setMessage(`练习题未通过，判题结果=${resp.data?.verdict || "-"}`);
@@ -431,19 +496,48 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
               <input
                 className="auth-input inline-input small"
                 type="number"
+                step="100"
                 value={practiceMinRating}
                 onChange={(event) => setPracticeMinRating(event.target.value)}
+                onBlur={(event) => setPracticeMinRating(normalizeToHundreds(event.target.value))}
                 placeholder="最小难度"
               />
               <input
                 className="auth-input inline-input small"
                 type="number"
+                step="100"
                 value={practiceMaxRating}
                 onChange={(event) => setPracticeMaxRating(event.target.value)}
+                onBlur={(event) => setPracticeMaxRating(normalizeToHundreds(event.target.value))}
                 placeholder="最大难度"
               />
-              <button className="primary-button" type="button" onClick={handleDrawPractice}>
-                抽题
+              <input
+                className="auth-input inline-input"
+                value={practiceTags}
+                onChange={(event) => setPracticeTags(event.target.value)}
+                placeholder="标签，逗号分隔（如 dp,graphs）"
+              />
+              <select
+                className="auth-input inline-input small"
+                value={selectedPracticeTag}
+                onChange={(event) => setSelectedPracticeTag(event.target.value)}
+              >
+                {PRACTICE_TAG_OPTIONS.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+              <button className="ghost-button" type="button" onClick={handleAddPresetTag}>
+                Add Tag
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={isDrawingPractice}
+                onClick={handleDrawPractice}
+              >
+                {isDrawingPractice ? "抽题中..." : "抽题"}
               </button>
             </div>
             <ProblemCard problem={practiceDraw?.problem} />
@@ -458,6 +552,33 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                 提交校验（不计分）
               </button>
             </div>
+            <section className="history-panel">
+              <h3>已完成练习</h3>
+              <div className="history-list">
+                {practiceHistory.length === 0 && (
+                  <article className="history-item">
+                    <div>
+                      <span className="history-pending">暂无记录</span>
+                    </div>
+                  </article>
+                )}
+                {practiceHistory.map((item) => (
+                  <article className="history-item" key={item.drawId}>
+                    <div>
+                      <strong>{item.drawDate}</strong>
+                      <p>
+                        {item.problemKey} | {item.name} | {item.rating ?? "未定级"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="history-ok">
+                        submissionId={item.submissionId ?? "-"}，verdict={item.verdict || "-"}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
           </section>
         )}
 

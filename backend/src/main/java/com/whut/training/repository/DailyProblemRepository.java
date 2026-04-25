@@ -1,6 +1,7 @@
 package com.whut.training.repository;
 
 import com.whut.training.domain.dto.DailyProblemHistoryItem;
+import com.whut.training.domain.dto.PracticeHistoryItem;
 import com.whut.training.domain.entity.CfProblem;
 import com.whut.training.domain.entity.DailyProblem;
 import com.whut.training.domain.entity.UserDailyStatus;
@@ -14,7 +15,10 @@ import org.springframework.stereotype.Repository;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -160,6 +164,29 @@ public class DailyProblemRepository {
         return rows.stream().findFirst();
     }
 
+    public Optional<CfProblem> findRandomProblem(Integer minRating, Integer maxRating, List<String> tagFilters) {
+        if (tagFilters == null || tagFilters.isEmpty()) {
+            return findRandomProblem(minRating, maxRating);
+        }
+        StringBuilder sql = new StringBuilder("""
+                SELECT problem_key, contest_id, problem_index, name, rating, tags, is_interactive, source_contest_id, solved_count, source_url
+                FROM cf_problem p
+                WHERE p.source_contest_id IS NULL
+                  AND p.rating IS NOT NULL
+                  AND p.rating BETWEEN ? AND ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(minRating);
+        params.add(maxRating);
+        for (String tag : tagFilters) {
+            sql.append(" AND LOWER(COALESCE(p.tags, '')) LIKE ? ");
+            params.add("%" + tag.toLowerCase() + "%");
+        }
+        sql.append(" ORDER BY RANDOM() LIMIT 1 ");
+        List<CfProblem> rows = jdbcTemplate.query(sql.toString(), cfProblemRowMapper, params.toArray());
+        return rows.stream().findFirst();
+    }
+
     public Optional<DailyProblem> findDailyByDate(LocalDate date) {
         List<DailyProblem> rows = jdbcTemplate.query(
                 """
@@ -276,6 +303,40 @@ public class DailyProblemRepository {
         );
     }
 
+    public List<DailyProblem> findDailyProblemsByDateRange(LocalDate startDate, LocalDate endDate) {
+        return jdbcTemplate.query(
+                """
+                        SELECT id, date, problem_key, contest_id, problem_index, name, rating, tags, source_url
+                        FROM daily_problem
+                        WHERE date BETWEEN ? AND ?
+                        ORDER BY date DESC
+                        """,
+                dailyProblemRowMapper,
+                startDate.toString(),
+                endDate.toString()
+        );
+    }
+
+    public Map<LocalDate, UserDailyStatus> findUserDailyStatusByDateRange(Long userId, LocalDate startDate,
+                                                                           LocalDate endDate) {
+        List<UserDailyStatus> rows = jdbcTemplate.query(
+                """
+                        SELECT user_id, date, submission_id, verdict, score
+                        FROM user_daily_status
+                        WHERE user_id = ? AND date BETWEEN ? AND ?
+                        """,
+                userDailyStatusRowMapper,
+                userId,
+                startDate.toString(),
+                endDate.toString()
+        );
+        Map<LocalDate, UserDailyStatus> result = new HashMap<>();
+        for (UserDailyStatus row : rows) {
+            result.put(row.date(), row);
+        }
+        return result;
+    }
+
     public UserPracticeDraw insertPracticeDraw(Long userId, LocalDate drawDate, CfProblem problem) {
         String sql = """
                 INSERT INTO user_practice_draw (
@@ -344,6 +405,42 @@ public class DailyProblemRepository {
                 OffsetDateTime.now().toString(),
                 drawId,
                 userId
+        );
+    }
+
+    public List<PracticeHistoryItem> findCheckedPracticeHistory(Long userId, int limit) {
+        int safeLimit = Math.max(1, Math.min(200, limit));
+        return jdbcTemplate.query(
+                """
+                        SELECT id,
+                               draw_date,
+                               problem_key,
+                               name,
+                               rating,
+                               source_url,
+                               submission_id,
+                               verdict,
+                               checked_at
+                        FROM user_practice_draw
+                        WHERE user_id = ?
+                          AND submission_id IS NOT NULL
+                          AND checked_at IS NOT NULL
+                        ORDER BY checked_at DESC, id DESC
+                        LIMIT ?
+                        """,
+                (rs, rowNum) -> new PracticeHistoryItem(
+                        rs.getLong("id"),
+                        rs.getString("draw_date"),
+                        rs.getString("problem_key"),
+                        rs.getString("name"),
+                        (Integer) rs.getObject("rating"),
+                        rs.getString("source_url"),
+                        rs.getLong("submission_id"),
+                        rs.getString("verdict"),
+                        rs.getString("checked_at")
+                ),
+                userId,
+                safeLimit
         );
     }
 }
