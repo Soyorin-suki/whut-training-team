@@ -46,12 +46,41 @@ export default function App() {
   function handleLogout() {
     clearStoredAuth();
     setAuth(null);
+    navigateTo(ROUTES.login);
   }
 
-  if (route === "login" || route === "register") {
+  function handleUserUpdate(updatedUser) {
+    setAuth((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const nextAuth = {
+        ...prev,
+        user: {
+          ...prev.user,
+          ...updatedUser
+        }
+      };
+      setStoredAuth(nextAuth);
+      return nextAuth;
+    });
+  }
+
+  if (!auth && route === "home") {
+    navigateTo(ROUTES.login);
     return (
       <HomeView
-        initialPage={route}
+        initialPage="login"
+        onAuthSuccess={handleAuthSuccess}
+        onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
+      />
+    );
+  }
+
+  if (route === "login" || route === "register" || !auth) {
+    return (
+      <HomeView
+        initialPage={route === "register" ? "register" : "login"}
         onAuthSuccess={handleAuthSuccess}
         onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
       />
@@ -62,6 +91,7 @@ export default function App() {
     <MainView
       auth={auth}
       onLogout={handleLogout}
+      onUserUpdate={handleUserUpdate}
       onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
     />
   );

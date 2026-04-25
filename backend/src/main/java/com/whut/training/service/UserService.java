@@ -1,6 +1,7 @@
 package com.whut.training.service;
 
 import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.UserUpdateRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
 
@@ -16,4 +17,6 @@ public interface UserService {
     User getById(Long id);
 
     User getByUsername(String username);
+
+    User updateProfile(Long userId, UserUpdateRequest request);
 }

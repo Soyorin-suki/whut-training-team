@@ -43,4 +43,5 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/auth/logout"
                 );
     }
+
 }

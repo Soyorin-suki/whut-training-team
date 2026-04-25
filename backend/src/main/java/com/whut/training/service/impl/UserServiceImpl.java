@@ -2,6 +2,7 @@ package com.whut.training.service.impl;
 
 import com.whut.training.aspect.annotation.ServiceLog;
 import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.UserUpdateRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
@@ -82,6 +83,55 @@ public class UserServiceImpl implements UserService {
     public User getByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(404, "user not found: " + username));
+    }
+
+    @Override
+    public User updateProfile(Long userId, UserUpdateRequest request) {
+        User user = getById(userId);
+        if (request == null) {
+            return user;
+        }
+
+        if (request.username() != null) {
+            String nextUsername = request.username().trim();
+            if (nextUsername.isEmpty()) {
+                throw new BusinessException(400, "username cannot be empty");
+            }
+            if (!nextUsername.equals(user.getUsername())) {
+                if (userRepository.existsByUsername(nextUsername)) {
+                    throw new BusinessException(400, "username already exists");
+                }
+                Optional<CodeforcesApiService.CodeforcesUserProfile> profileOptional =
+                        codeforcesApiService.getUserInfo(nextUsername);
+                if (profileOptional.isEmpty()) {
+                    throw new BusinessException(400, "username is not a valid Codeforces handle");
+                }
+                user.setUsername(nextUsername);
+                syncCodeforcesStats(user, profileOptional.get());
+            }
+        }
+
+        if (request.email() != null) {
+            user.setEmail(normalizeNullableText(request.email()));
+        }
+
+        if (request.password() != null) {
+            String password = request.password().trim();
+            if (!password.isEmpty()) {
+                if (password.length() < 6) {
+                    throw new BusinessException(400, "password length must be at least 6");
+                }
+                user.setPassword(password);
+            }
+        }
+        return userRepository.save(user);
+    }
+
+    private void syncCodeforcesStats(User user, CodeforcesApiService.CodeforcesUserProfile profile) {
+        user.setCodeforcesRating(profile.rating());
+        user.setMaxRating(profile.maxRating());
+        user.setOnline(profile.online());
+        user.setLastOnlineTimeSeconds(profile.lastOnlineTimeSeconds());
     }
 
     private void enrichFromCodeforcesIfNeeded(User user, CodeforcesApiService.CodeforcesUserProfile profile) {

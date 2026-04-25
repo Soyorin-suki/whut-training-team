@@ -48,3 +48,10 @@ export async function adminCreateUser(payload, tokens) {
   );
   return res.data;
 }
+
+export async function updateMyProfile(payload, tokens) {
+  const res = await http.patch("/api/users/me", payload ?? {}, {
+    headers: authHeaders(tokens)
+  });
+  return res.data;
+}

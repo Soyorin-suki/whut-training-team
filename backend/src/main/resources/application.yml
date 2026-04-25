@@ -15,6 +15,16 @@ app:
   logging:
     service:
       enabled: true
+  auth:
+    access-token-ttl-seconds: 1800
+    refresh-token-ttl-seconds: 604800
+  daily-problem:
+    min-rating: 1200
+    max-rating: 1600
+    no-repeat-days: 90
+    cron: "0 5 0 * * *"
+    sync-cron: "0 0 */6 * * *"
+    zone: "Asia/Shanghai"
 
 logging:
   level:
