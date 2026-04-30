@@ -20,6 +20,10 @@ public class RankServiceImpl implements RankService {
     @Override
     public ArrayList<UserRank> queryAllRank(Integer page, Integer pageSize) {
         ArrayList<UserRank> userRanks = userRepository.queryAllRank(page, pageSize);
+        int rank = (page - 1) * pageSize;
+        for (UserRank userRank : userRanks) {
+            userRank.setRank(++rank);
+        }
         return userRanks;
     }
 }
