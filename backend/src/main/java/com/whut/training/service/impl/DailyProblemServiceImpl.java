@@ -10,6 +10,7 @@ import com.whut.training.domain.entity.UserPracticeDraw;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.DailyProblemRepository;
+import com.whut.training.repository.UserRepository;
 import com.whut.training.service.CodeforcesApiService;
 import com.whut.training.service.DailyProblemService;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,19 +33,21 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     private final int defaultMinRating;
     private final int defaultMaxRating;
     private final int noRepeatDays;
+    private final UserRepository userRepository;
 
     public DailyProblemServiceImpl(
             DailyProblemRepository dailyProblemRepository,
             CodeforcesApiService codeforcesApiService,
             @Value("${app.daily-problem.min-rating:1200}") int defaultMinRating,
             @Value("${app.daily-problem.max-rating:1600}") int defaultMaxRating,
-            @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays
-    ) {
+            @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays,
+            UserRepository userRepository) {
         this.dailyProblemRepository = dailyProblemRepository;
         this.codeforcesApiService = codeforcesApiService;
         this.defaultMinRating = defaultMinRating;
         this.defaultMaxRating = defaultMaxRating;
         this.noRepeatDays = noRepeatDays;
+        this.userRepository = userRepository;
     }
 
     @Scheduled(cron = "${app.daily-problem.cron:0 5 0 * * *}", zone = "${app.daily-problem.zone:Asia/Shanghai}")
@@ -95,6 +98,14 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 submissionStatus.verdict(),
                 1
         );
+        //给当前用户加上daily分数
+        Optional<User> userOpt = userRepository.findByUsername(user.getUsername());
+        Integer userPreScore = userOpt
+                .map(User::getScore)
+                .orElse(0);
+        Integer userScore = userPreScore + dailyProblem.rating();
+        userRepository.updateUserScore(user.getId(), userScore);
+
         return new CheckInResultResponse("DAILY", true, submissionId, submissionStatus.verdict(), 1);
     }
 

@@ -2,7 +2,15 @@ package com.whut.training.domain.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.whut.training.domain.enums.UserRole;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class User {
     private Long id;
     private String username;
@@ -16,9 +24,7 @@ public class User {
     private Boolean online;
     private Long lastOnlineTimeSeconds;
     private String avatarUrl;
-
-    public User() {
-    }
+    private Integer score;
 
     public User(Long id, String username, String email, String password, UserRole role) {
         this(id, username, email, password, role, null, null, null, null, null);

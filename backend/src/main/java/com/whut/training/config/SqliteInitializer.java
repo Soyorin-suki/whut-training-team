@@ -38,7 +38,8 @@ public class SqliteInitializer {
                     max_rating INTEGER,
                     is_online INTEGER,
                     last_online_time_seconds INTEGER,
-                    avatar_url TEXT
+                    avatar_url TEXT,
+                    score INTEGER NOT NULL DEFAULT 0
                 )
                 """);
         ensureColumnExists("users", "uid", "INTEGER");
@@ -47,6 +48,7 @@ public class SqliteInitializer {
         ensureColumnExists("users", "is_online", "INTEGER");
         ensureColumnExists("users", "last_online_time_seconds", "INTEGER");
         ensureColumnExists("users", "avatar_url", "TEXT");
+        ensureColumnExists("users", "score", "INTEGER");
 
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS cf_problem (

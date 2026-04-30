@@ -2,6 +2,7 @@ package com.whut.training.domain.entity;
 
 import java.time.LocalDate;
 
+
 public record DailyProblem(
         Long id,
         LocalDate date,

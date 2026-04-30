@@ -127,6 +127,11 @@ public class UserServiceImpl implements UserService {
         return userRepository.save(user);
     }
 
+    @Override
+    public Integer getUserTotal() {
+        return userRepository.getTotal();
+    }
+
     private void syncCodeforcesStats(User user, CodeforcesApiService.CodeforcesUserProfile profile) {
         user.setCodeforcesRating(profile.rating());
         user.setMaxRating(profile.maxRating());

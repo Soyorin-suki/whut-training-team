@@ -31,7 +31,10 @@ public class UserController {
     public ApiResponse<List<User>> list() {
         return ApiResponse.ok(userService.list());
     }
-
+    @GetMapping("/total")
+    public ApiResponse<Integer> getUserTotal(){
+        return ApiResponse.ok(userService.getUserTotal());
+    }
     @GetMapping("/{id}")
     public ApiResponse<User> getById(@PathVariable Long id) {
         return ApiResponse.ok(userService.getById(id));

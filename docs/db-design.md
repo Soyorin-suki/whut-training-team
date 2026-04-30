@@ -16,22 +16,24 @@
 | is_online | INTEGER | NULL | 在线状态（0/1） |
 | last_online_time_seconds | INTEGER | NULL | 最近在线时间（Unix 秒） |
 | avatar_url | TEXT | NULL | 头像地址 |
+| score | INTEGER | NOT NULL DEFAULT 0 | 积分 | 
 
 ## 2) `cf_problem`（Codeforces 题库缓存）
 | 字段名 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
+| --- | --- | --- |----|
 | id | INTEGER | PK AUTOINCREMENT | 主键 |
 | problem_key | TEXT | NOT NULL, UNIQUE | 题目键（`contestId-index`） |
 | contest_id | INTEGER | NOT NULL | 比赛 ID |
-| problem_index | TEXT | NOT NULL | 题号（A/B/C...） |
+| problem_index | TEXT | NOT NULL | 题号（A/B/C...）|
 | name | TEXT | NOT NULL | 题目标题 |
 | rating | INTEGER | NULL | 题目难度 |
-| tags | TEXT | NULL | 标签，逗号分隔 |
+| tags | TEXT | NULL | 标签，逗号分隔|
 | is_interactive | INTEGER | NOT NULL DEFAULT 0 | 是否交互题 |
 | source_contest_id | INTEGER | NULL | 来源 contest（非空通常需过滤） |
 | solved_count | INTEGER | NULL | 通过人数 |
-| source_url | TEXT | NOT NULL | 题目链接 |
-| last_synced_at | TEXT | NOT NULL | 最后同步时间 |
+| source_url | TEXT | NOT NULL | 题目链接|
+| last_synced_at | TEXT | NOT NULL | 最后同步时间|
+
 
 ## 3) `daily_problem`（每日题快照）
 | 字段名 | 类型 | 约束 | 说明 |

@@ -19,4 +19,6 @@ public interface UserService {
     User getByUsername(String username);
 
     User updateProfile(Long userId, UserUpdateRequest request);
+
+    Integer getUserTotal();
 }

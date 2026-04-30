@@ -1,11 +1,14 @@
 package com.whut.training.repository;
 
 import com.whut.training.domain.entity.User;
+import com.whut.training.domain.entity.UserRank;
 import com.whut.training.domain.enums.UserRole;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -87,7 +90,7 @@ public class UserRepository {
 
     public Optional<User> findByUsername(String username) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url FROM users WHERE username = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score FROM users WHERE username = ?",
                 userRowMapper,
                 username
         );
@@ -101,6 +104,35 @@ public class UserRepository {
                 username
         );
         return count != null && count > 0;
+    }
+
+    public boolean updateUserScore(Long id, Integer userScore) {
+        int rows = jdbcTemplate.update(
+                "UPDATE users SET score = ? WHERE id = ?",
+                userScore,
+                id
+        );
+        return rows > 0;
+    }
+
+
+    public Integer getTotal() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM users",
+                Integer.class
+        );
+        return count;
+    }
+
+    public ArrayList<UserRank> queryAllRank(Integer page, Integer pageSize) {
+        String sql = "SELECT username, score FROM users ORDER BY score LIMIT ? ?";
+        ArrayList<UserRank> userRanks = (ArrayList<UserRank>) jdbcTemplate.queryForList(
+                sql,
+                UserRank.class,
+                (page - 1) * pageSize,
+                pageSize
+        );
+        return userRanks;
     }
 
     private UserRole parseRole(String roleText) {
@@ -132,4 +164,6 @@ public class UserRepository {
         }
         return Long.parseLong(rawValue.toString());
     }
+
+
 }
