@@ -39,7 +39,9 @@ public class SqliteInitializer {
                     is_online INTEGER,
                     last_online_time_seconds INTEGER,
                     avatar_url TEXT,
-                    score INTEGER NOT NULL DEFAULT 0
+                    score INTEGER NOT NULL DEFAULT 0,
+                    solved_problem_count INTEGER NOT NULL DEFAULT 0,
+                    hard_solved_problem_count INTEGER NOT NULL DEFAULT 0
                 )
                 """);
         ensureColumnExists("users", "uid", "INTEGER");
@@ -49,6 +51,11 @@ public class SqliteInitializer {
         ensureColumnExists("users", "last_online_time_seconds", "INTEGER");
         ensureColumnExists("users", "avatar_url", "TEXT");
         ensureColumnExists("users", "score", "INTEGER");
+        ensureColumnExists("users", "solved_problem_count", "INTEGER");
+        ensureColumnExists("users", "hard_solved_problem_count", "INTEGER");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_score ON users(score)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_solved_problem_count ON users(solved_problem_count)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_hard_solved_problem_count ON users(hard_solved_problem_count)");
 
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS cf_problem (

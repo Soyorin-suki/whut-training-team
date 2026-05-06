@@ -37,6 +37,12 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  useEffect(() => {
+    if (auth && (route === "login" || route === "register")) {
+      navigateTo(ROUTES.home);
+    }
+  }, [auth, route]);
+
   function handleAuthSuccess(nextAuth) {
     setStoredAuth(nextAuth);
     setAuth(nextAuth);
@@ -46,7 +52,7 @@ export default function App() {
   function handleLogout() {
     clearStoredAuth();
     setAuth(null);
-    navigateTo(ROUTES.login);
+    navigateTo(ROUTES.home);
   }
 
   function handleUserUpdate(updatedUser) {
@@ -54,6 +60,7 @@ export default function App() {
       if (!prev) {
         return prev;
       }
+
       const nextAuth = {
         ...prev,
         user: {
@@ -66,18 +73,7 @@ export default function App() {
     });
   }
 
-  if (!auth && route === "home") {
-    navigateTo(ROUTES.login);
-    return (
-      <HomeView
-        initialPage="login"
-        onAuthSuccess={handleAuthSuccess}
-        onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
-      />
-    );
-  }
-
-  if (route === "login" || route === "register" || !auth) {
+  if (!auth) {
     return (
       <HomeView
         initialPage={route === "register" ? "register" : "login"}

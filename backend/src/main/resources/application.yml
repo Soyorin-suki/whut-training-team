@@ -6,7 +6,7 @@ spring:
     name: training-backend
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:C:/Users/29768/Desktop/whut-training-team/backend/data/training.db
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/training.db}
 
 codeforces:
   base_url: https://codeforces.com/api
@@ -15,6 +15,10 @@ app:
   logging:
     service:
       enabled: true
+  codeforces:
+    hard-problem-threshold: 2000
+    user-stats-sync-cron: "0 0 */6 * * *"
+    user-stats-sync-zone: "Asia/Shanghai"
   auth:
     access-token-ttl-seconds: 1800
     refresh-token-ttl-seconds: 604800

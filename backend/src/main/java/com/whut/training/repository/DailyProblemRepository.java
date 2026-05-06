@@ -129,6 +129,21 @@ public class DailyProblemRepository {
         return count == null ? 0 : count;
     }
 
+    public Optional<Integer> findProblemRatingByKey(String problemKey) {
+        if (problemKey == null || problemKey.isBlank()) {
+            return Optional.empty();
+        }
+        List<Integer> ratings = jdbcTemplate.query(
+                "SELECT rating FROM cf_problem WHERE problem_key = ?",
+                (rs, rowNum) -> (Integer) rs.getObject("rating"),
+                problemKey
+        );
+        if (ratings.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(ratings.get(0));
+    }
+
     public Optional<CfProblem> findRandomProblem(Integer minRating, Integer maxRating, LocalDate noRepeatAfterDate) {
         String sql = """
                 SELECT problem_key, contest_id, problem_index, name, rating, tags, is_interactive, source_contest_id, solved_count, source_url

@@ -1,9 +1,10 @@
 package com.whut.training.service;
 
-import com.whut.training.domain.entity.UserRank;
-
-import java.util.List;
+import com.whut.training.domain.dto.LeaderboardEntryResponse;
+import com.whut.training.domain.dto.LeaderboardPageResponse;
 
 public interface RankService {
-    List<UserRank> queryAllRank(Integer page, Integer pageSize);
+    LeaderboardPageResponse getLeaderboard(String type, String page, String pageSize, Long currentUserId);
+
+    LeaderboardEntryResponse getMyLeaderboardEntry(String type, Long currentUserId);
 }

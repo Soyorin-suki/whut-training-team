@@ -162,8 +162,32 @@ public class CodeforcesApiService {
             return Optional.empty();
         }
 
+        try {
+            for (UserSubmission submission : fetchUserSubmissions(handle, 1, 1000).orElse(List.of())) {
+                if (!submissionId.equals(submission.submissionId())) {
+                    continue;
+                }
+                return Optional.of(new SubmissionStatus(
+                        submission.submissionId(),
+                        submission.contestId(),
+                        submission.problemIndex(),
+                        submission.verdict() == null ? "UNKNOWN" : submission.verdict(),
+                        submission.creationTime()
+                ));
+            }
+            return Optional.empty();
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<List<UserSubmission>> fetchUserSubmissions(String handle, int from, int count) {
+        if (handle == null || handle.isBlank() || from < 1 || count < 1) {
+            return Optional.empty();
+        }
+
         String encodedHandle = URLEncoder.encode(handle.trim(), StandardCharsets.UTF_8);
-        String url = baseUrl + "/user.status?handle=" + encodedHandle + "&from=1&count=1000";
+        String url = baseUrl + "/user.status?handle=" + encodedHandle + "&from=" + from + "&count=" + count;
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .GET()
@@ -184,28 +208,28 @@ public class CodeforcesApiService {
                 return Optional.empty();
             }
 
+            List<UserSubmission> submissions = new ArrayList<>();
             for (JsonNode row : result) {
-                Long id = nullableLong(row, "id");
-                if (id == null || !id.equals(submissionId)) {
-                    continue;
-                }
+                Long submissionId = nullableLong(row, "id");
                 JsonNode problem = row.path("problem");
                 Integer contestId = nullableInt(problem, "contestId");
                 String index = nullableText(problem, "index");
                 String verdict = nullableText(row, "verdict");
+                Integer rating = nullableInt(problem, "rating");
                 Long creationTimeSeconds = nullableLong(row, "creationTimeSeconds");
-                if (contestId == null || index == null) {
-                    return Optional.empty();
+                if (submissionId == null || contestId == null || index == null) {
+                    continue;
                 }
-                return Optional.of(new SubmissionStatus(
+                submissions.add(new UserSubmission(
                         submissionId,
                         contestId,
                         index,
-                        verdict == null ? "UNKNOWN" : verdict,
+                        verdict,
+                        rating,
                         creationTimeSeconds == null ? null : Instant.ofEpochSecond(creationTimeSeconds)
                 ));
             }
-            return Optional.empty();
+            return Optional.of(submissions);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return Optional.empty();
@@ -262,5 +286,12 @@ public class CodeforcesApiService {
 
     public record SubmissionStatus(Long submissionId, Integer contestId, String problemIndex, String verdict,
                                    Instant creationTime) {
+    }
+
+    public record UserSubmission(Long submissionId, Integer contestId, String problemIndex, String verdict,
+                                 Integer rating, Instant creationTime) {
+        public String problemKey() {
+            return contestId + "-" + problemIndex;
+        }
     }
 }

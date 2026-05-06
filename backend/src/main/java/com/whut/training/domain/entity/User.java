@@ -25,6 +25,8 @@ public class User {
     private Long lastOnlineTimeSeconds;
     private String avatarUrl;
     private Integer score;
+    private Integer solvedProblemCount;
+    private Integer hardSolvedProblemCount;
 
     public User(Long id, String username, String email, String password, UserRole role) {
         this(id, username, email, password, role, null, null, null, null, null);

@@ -90,6 +90,7 @@ export function buildAuthFromLogin(data) {
       uid: data.uid ?? null,
       codeforcesRating: data.codeforcesRating ?? null,
       maxRating: data.maxRating ?? null,
+      score: data.score ?? 0,
       online: data.online ?? null,
       lastOnlineTimeSeconds: lastOnline,
       lastOnlineTimeIso: lastOnlineIso,
