@@ -11,6 +11,7 @@ import {
 } from "../api/dailyProblem";
 import { getLeaderboard, getMyLeaderboardRank } from "../api/rankings";
 import { logout, updateMyProfile } from "../api/user";
+import AdminTrainingView from "./AdminTrainingView";
 import LeaderboardView from "./LeaderboardView";
 
 const PRACTICE_TAG_OPTIONS = [
@@ -35,6 +36,8 @@ const NAV_ITEMS = [
   { key: "leaderboard", label: "积分榜" },
   { key: "profile", label: "个人中心" }
 ];
+
+const ADMIN_NAV_ITEM = { key: "admin", label: "管理看板" };
 
 const QUICK_LINKS = [
   {
@@ -373,6 +376,8 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
   const isAdmin = user?.role === "ADMIN";
   const ratingMeta = getRatingMeta(user?.codeforcesRating);
   const dailyStatus = getDailyStatus(todayData);
+  const navItems = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
+  const showAdminPage = isAdmin && activeNav === "admin";
 
   const normalizedProfileUsername = profileUsername.trim();
   const normalizedProfileEmail = profileEmail.trim();
@@ -419,6 +424,12 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
       void loadRankingPreview();
     }
   }, [activeNav, tokens, user?.id]);
+
+  useEffect(() => {
+    if (!isAdmin && activeNav === "admin") {
+      setActiveNav("overview");
+    }
+  }, [activeNav, isAdmin]);
 
   async function loadDailyPanel() {
     if (!tokens) {
@@ -739,7 +750,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
         </div>
 
         <nav className="site-nav portal-nav">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               className={`site-nav-link ${activeNav === item.key ? "is-active" : ""}`}
               key={item.key}
@@ -769,6 +780,9 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
         </div>
       </header>
 
+      {showAdminPage ? (
+        <AdminTrainingView auth={auth} />
+      ) : (
       <section className="portal-page">
         <article className="portal-hero">
           <div className="portal-hero-copy">
@@ -1214,6 +1228,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
           </div>
         )}
       </section>
+      )}
     </main>
   );
 }

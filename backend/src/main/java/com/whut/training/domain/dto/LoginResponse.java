@@ -4,5 +4,5 @@ import com.whut.training.domain.enums.UserRole;
 
 public record LoginResponse(Long id, String username, String email, UserRole role, Long uid, Integer codeforcesRating,
                             Integer maxRating, Boolean online, Long lastOnlineTimeSeconds, String avatarUrl, Integer score,
-                            String accessToken, String refreshToken) {
+                            Integer currentStreakDays, Integer longestStreakDays, String accessToken, String refreshToken) {
 }

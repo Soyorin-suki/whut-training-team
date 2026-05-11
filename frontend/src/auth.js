@@ -91,6 +91,8 @@ export function buildAuthFromLogin(data) {
       codeforcesRating: data.codeforcesRating ?? null,
       maxRating: data.maxRating ?? null,
       score: data.score ?? 0,
+      currentStreakDays: data.currentStreakDays ?? 0,
+      longestStreakDays: data.longestStreakDays ?? 0,
       online: data.online ?? null,
       lastOnlineTimeSeconds: lastOnline,
       lastOnlineTimeIso: lastOnlineIso,

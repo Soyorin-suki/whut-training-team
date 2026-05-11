@@ -31,6 +31,8 @@ public class UserRepository {
         user.setScore(parseIntegerValue(rs.getObject("score")));
         user.setSolvedProblemCount(parseIntegerValue(rs.getObject("solved_problem_count")));
         user.setHardSolvedProblemCount(parseIntegerValue(rs.getObject("hard_solved_problem_count")));
+        user.setCurrentStreakDays(parseIntegerValue(rs.getObject("current_streak_days")));
+        user.setLongestStreakDays(parseIntegerValue(rs.getObject("longest_streak_days")));
         return user;
     };
     private final RowMapper<LeaderboardUserSnapshot> leaderboardUserRowMapper = (rs, rowNum) -> new LeaderboardUserSnapshot(
@@ -48,9 +50,11 @@ public class UserRepository {
         Integer score = user.getScore() == null ? 0 : user.getScore();
         Integer solvedProblemCount = user.getSolvedProblemCount() == null ? 0 : user.getSolvedProblemCount();
         Integer hardSolvedProblemCount = user.getHardSolvedProblemCount() == null ? 0 : user.getHardSolvedProblemCount();
+        Integer currentStreakDays = user.getCurrentStreakDays() == null ? 0 : user.getCurrentStreakDays();
+        Integer longestStreakDays = user.getLongestStreakDays() == null ? 0 : user.getLongestStreakDays();
         if (user.getId() == null) {
             jdbcTemplate.update(
-                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     user.getUsername(),
                     user.getEmail(),
                     user.getPassword(),
@@ -63,7 +67,9 @@ public class UserRepository {
                     user.getAvatarUrl(),
                     score,
                     solvedProblemCount,
-                    hardSolvedProblemCount
+                    hardSolvedProblemCount,
+                    currentStreakDays,
+                    longestStreakDays
             );
             Long id = jdbcTemplate.queryForObject(
                     "SELECT id FROM users WHERE username = ?",
@@ -74,11 +80,13 @@ public class UserRepository {
             user.setScore(score);
             user.setSolvedProblemCount(solvedProblemCount);
             user.setHardSolvedProblemCount(hardSolvedProblemCount);
+            user.setCurrentStreakDays(currentStreakDays);
+            user.setLongestStreakDays(longestStreakDays);
             return user;
         }
 
         jdbcTemplate.update(
-                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, score = ?, solved_problem_count = ?, hard_solved_problem_count = ? WHERE id = ?",
+                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, score = ?, solved_problem_count = ?, hard_solved_problem_count = ?, current_streak_days = ?, longest_streak_days = ? WHERE id = ?",
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
@@ -92,24 +100,28 @@ public class UserRepository {
                 score,
                 solvedProblemCount,
                 hardSolvedProblemCount,
+                currentStreakDays,
+                longestStreakDays,
                 user.getId()
         );
         user.setScore(score);
         user.setSolvedProblemCount(solvedProblemCount);
         user.setHardSolvedProblemCount(hardSolvedProblemCount);
+        user.setCurrentStreakDays(currentStreakDays);
+        user.setLongestStreakDays(longestStreakDays);
         return user;
     }
 
     public List<User> findAll() {
         return jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count FROM users ORDER BY id ASC",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days FROM users ORDER BY id ASC",
                 userRowMapper
         );
     }
 
     public Optional<User> findById(Long id) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count FROM users WHERE id = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days FROM users WHERE id = ?",
                 userRowMapper,
                 id
         );
@@ -118,7 +130,7 @@ public class UserRepository {
 
     public Optional<User> findByUsername(String username) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count FROM users WHERE username = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days FROM users WHERE username = ?",
                 userRowMapper,
                 username
         );
@@ -151,6 +163,45 @@ public class UserRepository {
                 id
         );
         return rows > 0;
+    }
+
+    public boolean updateUserScoreAndStreakStats(Long id, Integer userScore, Integer currentStreakDays, Integer longestStreakDays) {
+        int rows = jdbcTemplate.update(
+                "UPDATE users SET score = ?, current_streak_days = ?, longest_streak_days = ? WHERE id = ?",
+                userScore == null ? 0 : userScore,
+                currentStreakDays == null ? 0 : currentStreakDays,
+                longestStreakDays == null ? 0 : longestStreakDays,
+                id
+        );
+        return rows > 0;
+    }
+
+    public boolean updateUserStreakStats(Long id, Integer currentStreakDays, Integer longestStreakDays) {
+        int rows = jdbcTemplate.update(
+                "UPDATE users SET current_streak_days = ?, longest_streak_days = ? WHERE id = ?",
+                currentStreakDays == null ? 0 : currentStreakDays,
+                longestStreakDays == null ? 0 : longestStreakDays,
+                id
+        );
+        return rows > 0;
+    }
+
+    public List<Long> findUserIdsRequiringStreakBackfill() {
+        return jdbcTemplate.query(
+                """
+                        SELECT u.id
+                        FROM users u
+                        WHERE COALESCE(u.current_streak_days, 0) = 0
+                          AND COALESCE(u.longest_streak_days, 0) = 0
+                          AND EXISTS (
+                              SELECT 1
+                              FROM user_daily_status s
+                              WHERE s.user_id = u.id
+                          )
+                        ORDER BY u.id ASC
+                        """,
+                (rs, rowNum) -> rs.getLong("id")
+        );
     }
 
     public Integer getTotal() {
@@ -219,6 +270,8 @@ public class UserRepository {
             case DAILY_TOTAL -> "score";
             case SOLVED_COUNT -> "solved_problem_count";
             case HARD_SOLVED_COUNT -> "hard_solved_problem_count";
+            case CURRENT_STREAK -> "current_streak_days";
+            case LONGEST_STREAK -> "longest_streak_days";
             default -> throw new IllegalArgumentException("unsupported leaderboard type");
         };
     }

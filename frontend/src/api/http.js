@@ -8,6 +8,11 @@ const http = axios.create({
   timeout: 5000
 });
 
+const refreshClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 5000
+});
+
 let refreshingPromise = null;
 
 function shouldSkipRefresh(config) {
@@ -24,7 +29,7 @@ async function refreshAccessToken() {
     throw new Error("missing refresh token");
   }
 
-  const response = await axios.post(
+  const response = await refreshClient.post(
     "/api/auth/refresh",
     {},
     { headers: { "X-Refresh-Token": refreshToken } }

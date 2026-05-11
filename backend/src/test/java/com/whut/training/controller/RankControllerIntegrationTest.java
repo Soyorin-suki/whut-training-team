@@ -175,6 +175,54 @@ class RankControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.score").value(5));
     }
 
+    @Test
+    void returnsCurrentAndLongestStreakLeaderboards() throws Exception {
+        User alice = createUser("alice", 10);
+        User bob = createUser("bob", 20);
+        User carol = createUser("carol", 30);
+
+        userRepository.updateUserStreakStats(alice.getId(), 5, 7);
+        userRepository.updateUserStreakStats(bob.getId(), 5, 6);
+        userRepository.updateUserStreakStats(carol.getId(), 2, 9);
+
+        String accessToken = "access-bob";
+        String refreshToken = "refresh-bob";
+        authTokenSessionRepository.save(new AuthTokenSession(
+                bob.getId(),
+                accessToken,
+                refreshToken,
+                Instant.now().plusSeconds(3600).getEpochSecond(),
+                Instant.now().plusSeconds(7200).getEpochSecond()
+        ));
+
+        mockMvc.perform(get("/api/rankings")
+                        .param("type", "CURRENT_STREAK")
+                        .param("page", "1")
+                        .param("pageSize", "3")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .header("X-Refresh-Token", refreshToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.entries[0].username").value("alice"))
+                .andExpect(jsonPath("$.data.entries[0].score").value(5))
+                .andExpect(jsonPath("$.data.entries[1].username").value("bob"))
+                .andExpect(jsonPath("$.data.entries[1].score").value(5))
+                .andExpect(jsonPath("$.data.entries[1].rank").value(2))
+                .andExpect(jsonPath("$.data.currentUserEntry.username").value("bob"))
+                .andExpect(jsonPath("$.data.currentUserEntry.rank").value(2))
+                .andExpect(jsonPath("$.data.currentUserEntry.score").value(5));
+
+        mockMvc.perform(get("/api/rankings/me")
+                        .param("type", "LONGEST_STREAK")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .header("X-Refresh-Token", refreshToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.username").value("bob"))
+                .andExpect(jsonPath("$.data.rank").value(3))
+                .andExpect(jsonPath("$.data.score").value(6));
+    }
+
     private User createUser(String username, int score) {
         User user = new User(
                 null,

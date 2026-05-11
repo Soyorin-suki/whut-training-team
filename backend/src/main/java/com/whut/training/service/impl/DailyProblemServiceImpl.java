@@ -99,12 +99,24 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 1
         );
         //给当前用户加上daily分数
-        Optional<User> userOpt = userRepository.findByUsername(user.getUsername());
-        Integer userPreScore = userOpt
-                .map(User::getScore)
-                .orElse(0);
-        Integer userScore = userPreScore + dailyProblem.rating();
-        userRepository.updateUserScore(user.getId(), userScore);
+        User persistedUser = userRepository.findById(user.getId())
+                .orElseThrow(() -> new BusinessException(404, "user not found"));
+        LocalDate previousCheckInDate = dailyProblemRepository.findLatestUserDailyStatusDateBefore(user.getId(), today)
+                .orElse(null);
+        com.whut.training.service.UserStreakCalculator.StreakSnapshot nextStreak =
+                com.whut.training.service.UserStreakCalculator.nextAfterCheckIn(
+                        persistedUser.getCurrentStreakDays(),
+                        persistedUser.getLongestStreakDays(),
+                        previousCheckInDate,
+                        today
+                );
+        Integer userScore = (persistedUser.getScore() == null ? 0 : persistedUser.getScore()) + dailyProblem.rating();
+        userRepository.updateUserScoreAndStreakStats(
+                user.getId(),
+                userScore,
+                nextStreak.currentStreakDays(),
+                nextStreak.longestStreakDays()
+        );
 
         return new CheckInResultResponse("DAILY", true, submissionId, submissionStatus.verdict(), 1);
     }

@@ -27,6 +27,8 @@ public class User {
     private Integer score;
     private Integer solvedProblemCount;
     private Integer hardSolvedProblemCount;
+    private Integer currentStreakDays;
+    private Integer longestStreakDays;
 
     public User(Long id, String username, String email, String password, UserRole role) {
         this(id, username, email, password, role, null, null, null, null, null);
@@ -142,5 +144,21 @@ public class User {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public Integer getCurrentStreakDays() {
+        return currentStreakDays;
+    }
+
+    public void setCurrentStreakDays(Integer currentStreakDays) {
+        this.currentStreakDays = currentStreakDays;
+    }
+
+    public Integer getLongestStreakDays() {
+        return longestStreakDays;
+    }
+
+    public void setLongestStreakDays(Integer longestStreakDays) {
+        this.longestStreakDays = longestStreakDays;
     }
 }

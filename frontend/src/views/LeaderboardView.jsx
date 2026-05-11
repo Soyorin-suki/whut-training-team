@@ -7,22 +7,41 @@ const LEADERBOARD_TYPES = [
     key: "DAILY_TOTAL",
     label: "积分榜",
     title: "训练积分榜",
-    description: "按每日训练累计积分排序，用于查看当前综合排名。",
-    metricLabel: "积分"
+    description: "按每日训练累计积分排序，查看当前综合排名。",
+    metricLabel: "积分",
+    metricUnit: ""
   },
   {
     key: "SOLVED_COUNT",
-    label: "做题数量榜",
-    title: "做题数量榜",
-    description: "按 Codeforces 已通过题目的去重数量排序。",
-    metricLabel: "做题数"
+    label: "做题数榜",
+    title: "Codeforces 做题数榜",
+    description: "按已通过题目数量排序，关注稳定输出能力。",
+    metricLabel: "做题数",
+    metricUnit: ""
   },
   {
     key: "HARD_SOLVED_COUNT",
-    label: "难题数量榜",
-    title: "难题数量榜",
-    description: "按 rating 大于 2000 的已通过题目数量排序。",
-    metricLabel: "难题数"
+    label: "难题数榜",
+    title: "Codeforces 难题数榜",
+    description: "按高难题通过数量排序，观察高分题攻坚表现。",
+    metricLabel: "难题数",
+    metricUnit: ""
+  },
+  {
+    key: "CURRENT_STREAK",
+    label: "当前连续打卡榜",
+    title: "当前连续打卡榜",
+    description: "按当前连续打卡天数排序，查看谁还在持续连击。",
+    metricLabel: "连续天数",
+    metricUnit: "天"
+  },
+  {
+    key: "LONGEST_STREAK",
+    label: "历史最长打卡榜",
+    title: "历史最长打卡榜",
+    description: "按历史最长连续打卡天数排序，查看谁的纪录更高。",
+    metricLabel: "最长天数",
+    metricUnit: "天"
   }
 ];
 
@@ -49,11 +68,29 @@ function formatMetric(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
+function formatMetricWithUnit(value, unit) {
+  const formatted = formatMetric(value);
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
 function getLeaderboardMeta(type) {
   return LEADERBOARD_TYPES.find((item) => item.key === type) || LEADERBOARD_TYPES[0];
 }
 
-function LeaderboardRow({ entry }) {
+function getFallbackMetric(type, user) {
+  if (type === "DAILY_TOTAL") {
+    return user?.score ?? 0;
+  }
+  if (type === "CURRENT_STREAK") {
+    return user?.currentStreakDays ?? 0;
+  }
+  if (type === "LONGEST_STREAK") {
+    return user?.longestStreakDays ?? 0;
+  }
+  return 0;
+}
+
+function LeaderboardRow({ entry, metricUnit }) {
   if (!entry) {
     return null;
   }
@@ -74,7 +111,9 @@ function LeaderboardRow({ entry }) {
           <p>{entry.isCurrentUser ? "当前登录用户" : "训练用户"}</p>
         </div>
       </div>
-      <div className="leaderboard-score">{formatMetric(entry.score)}</div>
+      <div className="leaderboard-score">
+        {formatMetricWithUnit(entry.score, metricUnit)}
+      </div>
     </article>
   );
 }
@@ -82,16 +121,13 @@ function LeaderboardRow({ entry }) {
 export default function LeaderboardView({ auth }) {
   const user = auth?.user ?? null;
   const tokens = auth?.tokens ?? null;
-
   const [leaderboardType, setLeaderboardType] = useState("DAILY_TOTAL");
-  const [leaderboardStateByType, setLeaderboardStateByType] = useState(
-    createLeaderboardStateByType
-  );
+  const [leaderboardStateByType, setLeaderboardStateByType] = useState(createLeaderboardStateByType);
   const pageSize = 20;
 
   const selectedState = leaderboardStateByType[leaderboardType] || createTabState();
   const leaderboardMeta = getLeaderboardMeta(leaderboardType);
-  const fallbackMetric = leaderboardType === "DAILY_TOTAL" ? user?.score ?? 0 : 0;
+  const fallbackMetric = getFallbackMetric(leaderboardType, user);
   const pageCount = selectedState.total > 0 ? Math.ceil(selectedState.total / pageSize) : 1;
   const isInitialLoading = selectedState.loading && !selectedState.hasLoaded;
   const isRefreshing = selectedState.loading && selectedState.hasLoaded;
@@ -121,10 +157,7 @@ export default function LeaderboardView({ auth }) {
     }));
 
     try {
-      const pageResp = await getLeaderboard(
-        { type, page: nextPage, pageSize },
-        tokens
-      );
+      const pageResp = await getLeaderboard({ type, page: nextPage, pageSize }, tokens);
       if (pageResp.code !== 200) {
         updateLeaderboardState(type, (current) => ({
           ...current,
@@ -221,7 +254,12 @@ export default function LeaderboardView({ auth }) {
 
         <div className="leaderboard-me-score">
           <span>我的{leaderboardMeta.metricLabel}</span>
-          <strong>{formatMetric(selectedState.currentUserEntry?.score ?? fallbackMetric)}</strong>
+          <strong>
+            {formatMetricWithUnit(
+              selectedState.currentUserEntry?.score ?? fallbackMetric,
+              leaderboardMeta.metricUnit
+            )}
+          </strong>
         </div>
       </article>
 
@@ -245,6 +283,7 @@ export default function LeaderboardView({ auth }) {
             <LeaderboardRow
               key={entry.userId ?? `${entry.rank}-${entry.username}`}
               entry={entry}
+              metricUnit={leaderboardMeta.metricUnit}
             />
           ))
         )}

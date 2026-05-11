@@ -1,5 +1,13 @@
 name: whut-training-team
 
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  backend-data:
+  backend-logs:
+
 services:
   backend:
     build:
@@ -7,10 +15,12 @@ services:
       dockerfile: Dockerfile
     container_name: training-backend
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:sqlite:/app/data/training.db
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:sqlite:/app/data/training.db}
+    expose:
+      - "8080"
+    networks:
+      - app
     volumes:
       - backend-data:/app/data
       - backend-logs:/app/logs
@@ -25,14 +35,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     container_name: training-frontend
     restart: unless-stopped
-    ports:
-      - "5173:80"
     depends_on:
       backend:
         condition: service_healthy
-
-volumes:
-  backend-data:
-  backend-logs:
+    networks:
+      - app
+    ports:
+      - "5173:80"

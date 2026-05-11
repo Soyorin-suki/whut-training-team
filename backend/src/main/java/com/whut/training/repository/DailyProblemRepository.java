@@ -269,6 +269,22 @@ public class DailyProblemRepository {
         return rows.stream().findFirst();
     }
 
+    public Optional<LocalDate> findLatestUserDailyStatusDateBefore(Long userId, LocalDate date) {
+        List<String> rows = jdbcTemplate.query(
+                """
+                        SELECT date
+                        FROM user_daily_status
+                        WHERE user_id = ? AND date < ?
+                        ORDER BY date DESC
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> rs.getString("date"),
+                userId,
+                date.toString()
+        );
+        return rows.stream().findFirst().map(LocalDate::parse);
+    }
+
     public void saveUserDailyStatus(Long userId, LocalDate date, Long submissionId, String verdict, int score) {
         jdbcTemplate.update(
                 """
@@ -348,6 +364,25 @@ public class DailyProblemRepository {
         Map<LocalDate, UserDailyStatus> result = new HashMap<>();
         for (UserDailyStatus row : rows) {
             result.put(row.date(), row);
+        }
+        return result;
+    }
+
+    public Map<Long, List<LocalDate>> findAllUserDailyCheckInDates() {
+        List<UserDailyStatusDateRecord> rows = jdbcTemplate.query(
+                """
+                        SELECT user_id, date
+                        FROM user_daily_status
+                        ORDER BY user_id ASC, date ASC
+                        """,
+                (rs, rowNum) -> new UserDailyStatusDateRecord(
+                        rs.getLong("user_id"),
+                        LocalDate.parse(rs.getString("date"))
+                )
+        );
+        Map<Long, List<LocalDate>> result = new HashMap<>();
+        for (UserDailyStatusDateRecord row : rows) {
+            result.computeIfAbsent(row.userId(), ignored -> new ArrayList<>()).add(row.date());
         }
         return result;
     }
@@ -457,5 +492,8 @@ public class DailyProblemRepository {
                 userId,
                 safeLimit
         );
+    }
+
+    public record UserDailyStatusDateRecord(Long userId, LocalDate date) {
     }
 }

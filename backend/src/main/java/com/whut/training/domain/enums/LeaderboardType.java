@@ -6,6 +6,8 @@ public enum LeaderboardType {
     DAILY_TOTAL("score"),
     SOLVED_COUNT("solved_problem_count"),
     HARD_SOLVED_COUNT("hard_solved_problem_count"),
+    CURRENT_STREAK("current_streak_days"),
+    LONGEST_STREAK("longest_streak_days"),
     DAILY_7D(null),
     MONTHLY(null);
 

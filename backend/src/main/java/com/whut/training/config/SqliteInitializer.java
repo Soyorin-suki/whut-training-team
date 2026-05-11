@@ -41,7 +41,9 @@ public class SqliteInitializer {
                     avatar_url TEXT,
                     score INTEGER NOT NULL DEFAULT 0,
                     solved_problem_count INTEGER NOT NULL DEFAULT 0,
-                    hard_solved_problem_count INTEGER NOT NULL DEFAULT 0
+                    hard_solved_problem_count INTEGER NOT NULL DEFAULT 0,
+                    current_streak_days INTEGER NOT NULL DEFAULT 0,
+                    longest_streak_days INTEGER NOT NULL DEFAULT 0
                 )
                 """);
         ensureColumnExists("users", "uid", "INTEGER");
@@ -53,9 +55,13 @@ public class SqliteInitializer {
         ensureColumnExists("users", "score", "INTEGER");
         ensureColumnExists("users", "solved_problem_count", "INTEGER");
         ensureColumnExists("users", "hard_solved_problem_count", "INTEGER");
+        ensureColumnExists("users", "current_streak_days", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumnExists("users", "longest_streak_days", "INTEGER NOT NULL DEFAULT 0");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_score ON users(score)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_solved_problem_count ON users(solved_problem_count)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_hard_solved_problem_count ON users(hard_solved_problem_count)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_current_streak_days ON users(current_streak_days)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_users_longest_streak_days ON users(longest_streak_days)");
 
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS cf_problem (

@@ -75,6 +75,8 @@ public class AuthServiceImpl implements AuthService {
                 user.getLastOnlineTimeSeconds(),
                 user.getAvatarUrl(),
                 user.getScore(),
+                user.getCurrentStreakDays(),
+                user.getLongestStreakDays(),
                 pair.accessToken(),
                 pair.refreshToken()
         );

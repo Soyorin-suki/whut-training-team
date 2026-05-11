@@ -795,6 +795,11 @@ select {
   color: var(--brand-deep);
 }
 
+.leaderboard-score,
+.leaderboard-me-score strong {
+  white-space: nowrap;
+}
+
 .side-info-card h3 {
   font-size: 24px;
 }
@@ -1030,6 +1035,197 @@ select {
   min-height: 100%;
 }
 
+.admin-view {
+  margin-top: 20px;
+  display: grid;
+  gap: 18px;
+}
+
+.admin-hero-card {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-overview-grid {
+  margin-top: 0;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.admin-column {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-table {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-table-head,
+.admin-table-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 1.5fr) minmax(180px, 1.1fr) 88px;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-table-head.is-user-table,
+.admin-table-row.is-user-table {
+  grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.25fr) minmax(150px, 1fr) minmax(190px, 1.3fr) 72px;
+}
+
+.admin-table-head {
+  padding: 0 12px;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+}
+
+.admin-table-row {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 12px;
+  background: rgba(255, 255, 255, 0.76);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-table-row:hover {
+  transform: translateY(-1px);
+}
+
+.admin-table-row.is-active {
+  border-color: rgba(33, 79, 156, 0.22);
+  box-shadow: 0 0 0 1px rgba(33, 79, 156, 0.08);
+}
+
+.admin-table-row span {
+  display: block;
+  color: var(--brand-deep);
+  font-weight: 700;
+}
+
+.admin-table-row small {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-soft);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.admin-detail-grid {
+  margin-top: 18px;
+}
+
+.admin-detail-card {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-detail-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-detail-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-mini-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+}
+
+.admin-entity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-entity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid var(--line);
+}
+
+.admin-entity-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-entity-user strong {
+  color: var(--brand-deep);
+}
+
+.admin-entity-row span {
+  color: var(--brand-deep);
+  font-weight: 700;
+}
+
+.admin-entity-row span small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+.admin-entity-row small {
+  color: var(--text-soft);
+  text-align: right;
+}
+
+.admin-user-summary {
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(22, 50, 79, 0.92), rgba(33, 79, 156, 0.92));
+  color: #ffffff;
+}
+
+.admin-user-summary p {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(33, 79, 156, 0.12);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 1180px) {
   .site-header {
     flex-wrap: wrap;
@@ -1054,7 +1250,9 @@ select {
   .landing-feature-grid,
   .landing-strip,
   .profile-highlight-row,
-  .profile-readonly-grid {
+  .profile-readonly-grid,
+  .admin-grid,
+  .admin-detail-columns {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1091,7 +1289,9 @@ select {
   .quick-link-grid,
   .filter-grid,
   .profile-highlight-row,
-  .profile-readonly-grid {
+  .profile-readonly-grid,
+  .admin-grid,
+  .admin-detail-columns {
     grid-template-columns: 1fr;
   }
 
@@ -1121,6 +1321,15 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .admin-table-head {
+    display: none;
+  }
+
+  .admin-table-row,
+  .admin-entity-row {
+    grid-template-columns: 1fr;
+  }
+
   .mini-rank-row {
     flex-wrap: wrap;
   }
@@ -1128,7 +1337,8 @@ select {
   .timeline-date,
   .timeline-status,
   .rank-me-score,
-  .leaderboard-me-score {
+  .leaderboard-me-score,
+  .admin-entity-row small {
     text-align: left;
   }
 }
