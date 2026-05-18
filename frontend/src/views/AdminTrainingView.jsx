@@ -8,7 +8,6 @@ import {
   getAdminUserTimeline,
   getAdminUserTrainingPage
 } from "../api/adminTraining";
-import AdminAiProblemWorkbench from "./AdminAiProblemWorkbench";
 
 function formatNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -827,7 +826,6 @@ export default function AdminTrainingView({ auth }) {
         </div>
       </div>
 
-      <AdminAiProblemWorkbench auth={auth} />
     </section>
   );
 }

@@ -11,7 +11,8 @@ const MAIN_NAV_KEYS = new Set([
   "favorites",
   "leaderboard",
   "profile",
-  "admin"
+  "admin",
+  "admin-ai"
 ]);
 
 function normalizeNav(value) {

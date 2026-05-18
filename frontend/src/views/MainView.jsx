@@ -16,6 +16,7 @@ import {
 } from "../api/dailyProblem";
 import { getLeaderboard, getMyLeaderboardRank } from "../api/rankings";
 import { logout, updateMyProfile } from "../api/user";
+import AdminAiProblemWorkbench from "./AdminAiProblemWorkbench";
 import AdminTrainingView from "./AdminTrainingView";
 import LeaderboardView from "./LeaderboardView";
 
@@ -45,7 +46,10 @@ const NAV_ITEMS = [
   { key: "profile", label: "个人中心" }
 ];
 
-const ADMIN_NAV_ITEM = { key: "admin", label: "管理看板" };
+const ADMIN_NAV_ITEMS = [
+  { key: "admin", label: "管理看板" },
+  { key: "admin-ai", label: "AI 出题" }
+];
 
 const QUICK_LINKS = [
   {
@@ -686,8 +690,9 @@ export default function MainView({ auth, initialNav = "overview", onLogout, onNa
   const isAdmin = user?.role === "ADMIN";
   const ratingMeta = getRatingMeta(user?.codeforcesRating);
   const dailyStatus = getDailyStatus(todayData);
-  const navItems = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
+  const navItems = isAdmin ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS] : NAV_ITEMS;
   const showAdminPage = isAdmin && activeNav === "admin";
+  const showAdminAiPage = isAdmin && activeNav === "admin-ai";
 
   const normalizedProfileUsername = profileUsername.trim();
   const normalizedProfileEmail = profileEmail.trim();
@@ -713,7 +718,7 @@ export default function MainView({ auth, initialNav = "overview", onLogout, onNa
   }, [user?.id]);
 
   useEffect(() => {
-    if (initialNav === "admin" && !isAdmin) {
+    if ((initialNav === "admin" || initialNav === "admin-ai") && !isAdmin) {
       setActiveNav("overview");
       return;
     }
@@ -750,7 +755,7 @@ export default function MainView({ auth, initialNav = "overview", onLogout, onNa
   }, [activeNav, favoritePage, tokens, user?.id]);
 
   useEffect(() => {
-    if (!isAdmin && activeNav === "admin") {
+    if (!isAdmin && (activeNav === "admin" || activeNav === "admin-ai")) {
       setActiveNav("overview");
     }
   }, [activeNav, isAdmin]);
@@ -1339,6 +1344,10 @@ export default function MainView({ auth, initialNav = "overview", onLogout, onNa
 
       {showAdminPage ? (
         <AdminTrainingView auth={auth} />
+      ) : showAdminAiPage ? (
+        <section className="portal-page">
+          <AdminAiProblemWorkbench auth={auth} />
+        </section>
       ) : (
       <section className="portal-page">
         <article className="portal-hero">
