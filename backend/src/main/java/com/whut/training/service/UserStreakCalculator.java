@@ -11,6 +11,10 @@ public final class UserStreakCalculator {
     }
 
     public static StreakSnapshot calculate(List<LocalDate> dates) {
+        return calculate(dates, LocalDate.now());
+    }
+
+    public static StreakSnapshot calculate(List<LocalDate> dates, LocalDate referenceDate) {
         if (dates == null || dates.isEmpty()) {
             return new StreakSnapshot(0, 0);
         }
@@ -24,18 +28,23 @@ public final class UserStreakCalculator {
             return new StreakSnapshot(0, 0);
         }
 
-        int current = 0;
+        LocalDate safeReferenceDate = referenceDate == null ? LocalDate.now() : referenceDate;
+        int runningStreak = 0;
         int longest = 0;
         LocalDate previousDate = null;
         for (LocalDate date : orderedDates) {
             if (previousDate != null && previousDate.plusDays(1).equals(date)) {
-                current += 1;
+                runningStreak += 1;
             } else {
-                current = 1;
+                runningStreak = 1;
             }
-            longest = Math.max(longest, current);
+            longest = Math.max(longest, runningStreak);
             previousDate = date;
         }
+        LocalDate lastCheckInDate = orderedDates.get(orderedDates.size() - 1);
+        boolean streakIsStillActive = !lastCheckInDate.isBefore(safeReferenceDate.minusDays(1))
+                && !lastCheckInDate.isAfter(safeReferenceDate);
+        int current = streakIsStillActive ? runningStreak : 0;
         return new StreakSnapshot(current, longest);
     }
 

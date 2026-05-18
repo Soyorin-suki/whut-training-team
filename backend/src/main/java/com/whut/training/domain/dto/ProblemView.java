@@ -9,6 +9,10 @@ public record ProblemView(
         String name,
         Integer rating,
         String tags,
-        String sourceUrl
+        String sourceUrl,
+        Integer likeCount,
+        boolean likedByMe,
+        boolean favoritedByMe,
+        String favoritedAt
 ) {
 }

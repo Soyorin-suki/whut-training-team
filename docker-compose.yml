@@ -1,5 +1,16 @@
 name: whut-training-team
 
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  init: true
+  networks:
+    - app
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 networks:
   app:
     driver: bridge
@@ -7,42 +18,68 @@ networks:
 volumes:
   backend-data:
   backend-logs:
+  redis-data:
 
 services:
   backend:
+    <<: *service-defaults
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: training-backend
-    restart: unless-stopped
+    image: whut-training-team/backend:local
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:sqlite:/app/data/training.db}
+      SPRING_DATA_REDIS_HOST: ${SPRING_DATA_REDIS_HOST:-redis}
+      SPRING_DATA_REDIS_PORT: ${SPRING_DATA_REDIS_PORT:-6379}
+      APP_DAILY_PROBLEM_CACHE_TTL: ${APP_DAILY_PROBLEM_CACHE_TTL:-1d}
+      JAVA_OPTS: ${JAVA_OPTS:-}
     expose:
       - "8080"
-    networks:
-      - app
     volumes:
       - backend-data:/app/data
       - backend-logs:/app/logs
+    stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health > /dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
 
+  redis:
+    <<: *service-defaults
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   frontend:
+    <<: *service-defaults
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
-    container_name: training-frontend
-    restart: unless-stopped
+    image: whut-training-team/frontend:local
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - app
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

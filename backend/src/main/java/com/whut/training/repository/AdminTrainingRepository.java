@@ -183,7 +183,11 @@ public class AdminTrainingRepository {
                                     rs.getString("name"),
                                     (Integer) rs.getObject("rating"),
                                     rs.getString("tags"),
-                                    rs.getString("source_url")
+                                    rs.getString("source_url"),
+                                    0,
+                                    false,
+                                    false,
+                                    null
                             ),
                             totalUsers,
                             dailyCheckInCount,

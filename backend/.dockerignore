@@ -1,6 +1,7 @@
 target
 data
 logs
+.m2
 .git
 .idea
 *.log

@@ -12,9 +12,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.util.AntPathMatcher;
 
 @Component
 public class AccessTokenInterceptor implements HandlerInterceptor {
+
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
     private final AuthService authService;
     private final ObjectMapper objectMapper;
@@ -31,6 +34,10 @@ public class AccessTokenInterceptor implements HandlerInterceptor {
         }
         try {
             String authorization = request.getHeader("Authorization");
+            if ((authorization == null || authorization.isBlank()) && isOptionalPublicReadRequest(request)) {
+                UserContext.clear();
+                return true;
+            }
             String accessToken = TokenUtils.parseBearerToken(authorization);
             User user = authService.validateAccessTokenAndGetUser(accessToken);
             UserContext.setCurrentUser(user);
@@ -55,5 +62,14 @@ public class AccessTokenInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         UserContext.clear();
+    }
+
+    private boolean isOptionalPublicReadRequest(HttpServletRequest request) {
+        if (!RequestMethod.GET.name().equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String uri = request.getRequestURI();
+        return PATH_MATCHER.match("/api/problems/*", uri)
+                || PATH_MATCHER.match("/api/problem-comments/*", uri);
     }
 }

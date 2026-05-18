@@ -9,6 +9,10 @@ public record DailyProblemHistoryItem(
         boolean checkedIn,
         Long submissionId,
         String verdict,
-        Integer score
+        Integer score,
+        Integer likeCount,
+        boolean likedByMe,
+        boolean favoritedByMe,
+        String favoritedAt
 ) {
 }

@@ -1,13 +1,15 @@
-# 接口设计文档（前后端对接）
+# API Design
 
-## 1. 基础信息
-- 后端地址：`http://localhost:8080`
-- API 前缀：`/api`
-- 鉴权请求头：
-  - `Authorization: Bearer <accessToken>`
-  - `X-Refresh-Token: <refreshToken>`
+This document describes the currently implemented backend API surface.
 
-统一响应结构：
+## 1. Basics
+
+- Direct backend base URL: `http://localhost:8080`
+- API prefix: `/api`
+- In Docker, browser traffic should normally go through the frontend entrypoint: `http://localhost:5173/api/*`
+
+Unified response envelope:
+
 ```json
 {
   "code": 200,
@@ -16,40 +18,120 @@
 }
 ```
 
-说明：
-- 业务是否成功请以 `code === 200` 判断。
-- 当前项目大多数错误会返回 `HTTP 200 + code/message`，少量场景可能返回 `401`。
+Notes:
 
-## 2. 鉴权分级
+- Treat `code === 200` as the business success signal
+- Many business failures are returned as `HTTP 200` with non-`200` `code`
+- Authentication failures usually return `HTTP 401`
 
-免鉴权接口：
+Auth headers:
+
+- `Authorization: Bearer <accessToken>`
+- `X-Refresh-Token: <refreshToken>`
+
+## 2. Auth Levels
+
+### 2.1 Public endpoints
+
 - `GET /api/health`
 - `POST /api/users/register`
 - `POST /api/auth/login`
 
-登录鉴权接口：
-- `POST /api/auth/logout`
-- `POST /api/auth/refresh`
-- `GET /api/users`
-- `GET /api/users/{id}`
-- `PATCH /api/users/me`
-- `GET /api/daily-problem/today`
-- `POST /api/daily-problem/check-in`
-- `GET /api/daily-problem/history`
-- `POST /api/practice/draw`
-- `POST /api/practice/check`
+### 2.2 Optional-auth read endpoints
 
-管理员接口（需 ADMIN）：
+These endpoints can be called anonymously. If a valid access token is present, user-specific status is also resolved.
+
+- `GET /api/problems/{problemKey}`
+- `GET /api/problem-comments/{problemKey}`
+
+### 2.3 Login-required endpoints
+
+- user profile endpoints
+- daily problem endpoints
+- practice endpoints
+- likes and favorites
+- rankings
+- legacy daily comment compatibility endpoints
+
+### 2.4 Admin-only endpoints
+
 - `POST /api/admin/users`
 - `POST /api/admin/daily-problem/regenerate`
+- `GET /api/admin/training/*`
 
-## 3. 用户接口
+## 3. Core DTO Snapshots
 
-### 3.1 注册
+### 3.1 `ProblemView`
+
+Embedded problem payload used in daily and practice responses:
+
+```json
+{
+  "type": "DAILY",
+  "date": "2026-05-17",
+  "problemKey": "2000-A",
+  "contestId": 2000,
+  "problemIndex": "A",
+  "name": "Problem A",
+  "rating": 1500,
+  "tags": "dp,graphs",
+  "sourceUrl": "https://codeforces.com/problemset/problem/2000/A",
+  "likeCount": 3,
+  "likedByMe": true,
+  "favoritedByMe": false,
+  "favoritedAt": null
+}
+```
+
+### 3.2 `ProblemDetailView`
+
+Dedicated problem detail payload:
+
+```json
+{
+  "problemKey": "2000-A",
+  "contestId": 2000,
+  "problemIndex": "A",
+  "name": "Problem A",
+  "rating": 1500,
+  "tags": "dp,graphs",
+  "sourceUrl": "https://codeforces.com/problemset/problem/2000/A",
+  "likeCount": 3,
+  "likedByMe": true,
+  "favoritedByMe": false,
+  "favoritedAt": null
+}
+```
+
+### 3.3 `ProblemCommentItem`
+
+Problem comments are returned as a two-level tree:
+
+```json
+{
+  "id": 12,
+  "problemKey": "2000-A",
+  "content": "Binary search works here.",
+  "createdAt": "2026-05-17T09:00:00+08:00",
+  "replyCommentId": null,
+  "replyToUsername": null,
+  "author": {
+    "userId": 3,
+    "username": "alice",
+    "avatarUrl": "https://example.com/avatar.png"
+  },
+  "replies": []
+}
+```
+
+## 4. User And Auth Endpoints
+
+### 4.1 Register
+
 - `POST /api/users/register`
-- `Content-Type: application/json`
 
-请求示例：
+Request body:
+
 ```json
 {
   "username": "alice",
@@ -58,89 +140,152 @@
 }
 ```
 
-说明：
-- `username` 必须是有效 Codeforces handle（后端调用 `user.info` 校验）。
+### 4.2 Login
 
-### 3.2 登录
 - `POST /api/auth/login`
 
-返回字段包含：
-- 用户信息（`id/username/email/role/uid/codeforcesRating/maxRating/online/lastOnlineTimeSeconds/avatarUrl`）
+Request body:
+
+```json
+{
+  "username": "alice",
+  "password": "123456"
+}
+```
+
+`data` includes:
+
+- user profile fields
+- `score`
+- `currentStreakDays`
+- `longestStreakDays`
 - `accessToken`
 - `refreshToken`
 
-### 3.3 刷新令牌
+### 4.3 Refresh token
+
 - `POST /api/auth/refresh`
-- Header：`X-Refresh-Token`
+- header: `X-Refresh-Token`
 
-### 3.4 登出
+### 4.4 Logout
+
 - `POST /api/auth/logout`
-- Header：`Authorization` + `X-Refresh-Token`
+- headers: `Authorization` and `X-Refresh-Token`
 
-### 3.5 修改个人信息
+### 4.5 User profile
+
+- `GET /api/users`
+- `GET /api/users/total`
+- `GET /api/users/{id}`
 - `PATCH /api/users/me`
-- `Content-Type: application/json`
-- 仅当前登录用户可修改自己
 
-请求体：
+Update payload:
+
 ```json
 {
+  "username": "alice",
   "email": "new_mail@example.com",
   "password": "new_password_123"
 }
 ```
 
-说明：
-- `password` 可不传或传空字符串（表示不修改密码）。
-- 非空密码长度需 `>= 6`。
+## 5. Daily Problem And Practice Endpoints
 
-### 3.6 上传头像
-- `Content-Type: multipart/form-data`
-- 表单字段：`file`
+### 5.1 Get today's problem
 
-说明：
-- 仅允许图片类型，支持：`png/jpg/jpeg/gif/webp`
-- 文件大小上限：`2MB`
-- 公开访问路径：`/uploads/avatars/{fileName}`
-
-## 4. 每日一题与练习题接口
-
-### 4.1 获取今日题（全员同题）
 - `GET /api/daily-problem/today`
 
-说明：
-- 如果当天题目不存在，后端会立即自动生成一题。
+Returns:
 
-### 4.2 每日题打卡（计分）
+```json
+{
+  "problem": {},
+  "checkedIn": false,
+  "score": null
+}
+```
+
+Notes:
+
+- `problem` is a `ProblemView`
+- the shared daily problem payload may be served from Redis
+- `checkedIn` and `score` are still resolved per user
+
+### 5.2 Daily check-in
+
 - `POST /api/daily-problem/check-in`
-- 请求体：
+
+Request body:
+
 ```json
 {
   "submissionId": 123456789
 }
 ```
 
-规则：
-- 校验该提交是否属于当前用户且对应今日题。
-- 仅 `verdict=OK` 记分（当前为 `+1`）。
-- 同一用户同一天只能打卡一次。
+Returns:
 
-### 4.3 每日题历史
-- `GET /api/daily-problem/history?limit=14`
-
-### 4.4 自主抽题（不计分）
-- `POST /api/practice/draw`
-- 请求体（可选）：
 ```json
 {
-  "minRating": 1200,
-  "maxRating": 1600
+  "type": "DAILY",
+  "accepted": true,
+  "submissionId": 123456789,
+  "verdict": "OK",
+  "score": 1
 }
 ```
 
-### 4.5 练习题校验（不计分）
+### 5.3 Daily history
+
+- `GET /api/daily-problem/history?limit=14`
+
+Each item includes:
+
+- `date`
+- `problemKey`
+- `name`
+- `rating`
+- `sourceUrl`
+- `checkedIn`
+- `submissionId`
+- `verdict`
+- `score`
+- `likeCount`
+- `likedByMe`
+- `favoritedByMe`
+- `favoritedAt`
+
+### 5.4 Practice draw
+
+- `POST /api/practice/draw`
+
+Request body:
+
+```json
+{
+  "minRating": 1200,
+  "maxRating": 1600,
+  "tags": "dp,graphs"
+}
+```
+
+Returns:
+
+```json
+{
+  "drawId": 1,
+  "problem": {}
+}
+```
+
+`problem` is a `ProblemView`.
+
+### 5.5 Practice check
+
 - `POST /api/practice/check`
-- 请求体：
+
+Request body:
+
 ```json
 {
   "drawId": 1,
@@ -148,14 +293,193 @@
 }
 ```
 
-### 4.6 管理员重生成今日题
+### 5.6 Practice history
+
+- `GET /api/practice/history?limit=30`
+
+Each item includes:
+
+- `drawId`
+- `drawDate`
+- `problemKey`
+- `name`
+- `rating`
+- `sourceUrl`
+- `submissionId`
+- `verdict`
+- `checkedAt`
+- `likeCount`
+- `likedByMe`
+- `favoritedByMe`
+- `favoritedAt`
+
+### 5.7 Admin regenerate today's problem
+
 - `POST /api/admin/daily-problem/regenerate`
 
-## 5. 常见业务错误码
-- `400` 参数错误、提交不匹配题目、文件格式不支持等
-- `401` 未登录、token 无效或过期
-- `403` 非管理员调用管理员接口
-- `404` 资源不存在
-- `409` 今日已打卡
-- `500` 服务端异常
-- `503` Codeforces 拉题失败
+## 6. Problem Detail, Comments, Likes, Favorites
+
+### 6.1 Problem detail
+
+- `GET /api/problems/{problemKey}`
+
+Notes:
+
+- anonymous reads are allowed
+- when logged in, `likedByMe` and `favoritedByMe` are resolved for the current user
+
+### 6.2 Shared problem comments
+
+- `GET /api/problem-comments/{problemKey}`
+- `POST /api/problem-comments`
+
+Create payload:
+
+```json
+{
+  "problemKey": "2000-A",
+  "content": "Binary search works here.",
+  "replyCommentId": null
+}
+```
+
+Server-side validation rules:
+
+- `problemKey` is required and must exist
+- `content` must be non-blank and at most `1000` chars
+- replying to a missing comment returns `404`
+- replying across different problems returns `409`
+
+### 6.3 Likes
+
+- `POST /api/problem-like`
+- `DELETE /api/problem-like/{problemKey}`
+
+Request body:
+
+```json
+{
+  "problemKey": "2000-A"
+}
+```
+
+Response:
+
+```json
+{
+  "problemKey": "2000-A",
+  "likeCount": 3,
+  "likedByMe": true
+}
+```
+
+### 6.4 Favorites
+
+- `POST /api/problem-favorite`
+- `DELETE /api/problem-favorite/{problemKey}`
+- `GET /api/problem-favorite/mine?page=1&limit=50`
+
+Request body:
+
+```json
+{
+  "problemKey": "2000-A"
+}
+```
+
+Status response:
+
+```json
+{
+  "problemKey": "2000-A",
+  "favoritedByMe": true,
+  "favoritedAt": "2026-05-17T09:00:00+08:00"
+}
+```
+
+Paginated favorite list response fields:
+
+- `items`
+- `page`
+- `limit`
+- `total`
+
+Each favorite item includes at least:
+
+- `problemKey`
+- `contestId`
+- `problemIndex`
+- `name`
+- `rating`
+- `tags`
+- `sourceUrl`
+- `sourceType`
+- `favoritedAt`
+
+## 7. Ranking Endpoints
+
+- `GET /api/rankings?type=DAILY_TOTAL&page=1&pageSize=20`
+- `GET /api/rankings/me?type=DAILY_TOTAL`
+
+Supported `type` values:
+
+- `DAILY_TOTAL`
+- `SOLVED_COUNT`
+- `HARD_SOLVED_COUNT`
+- `CURRENT_STREAK`
+- `LONGEST_STREAK`
+
+## 8. Admin Endpoints
+
+### 8.1 Admin create user
+
+- `POST /api/admin/users`
+
+Request body:
+
+```json
+{
+  "username": "student1",
+  "email": "student1@example.com",
+  "password": "123456",
+  "role": "USER"
+}
+```
+
+### 8.2 Training operations dashboard
+
+- `GET /api/admin/training/overview`
+- `GET /api/admin/training/daily-records?startDate=2026-05-01&endDate=2026-05-17&page=1&pageSize=20`
+- `GET /api/admin/training/daily-records/{date}`
+- `GET /api/admin/training/users?keyword=alice&page=1&pageSize=20`
+- `GET /api/admin/training/users/{userId}/timeline?limit=30`
+
+## 9. Legacy Daily Comment Compatibility Endpoints
+
+These endpoints still exist, but the main frontend no longer uses them.
+
+- `GET /api/daily-problem/comments/today`
+- `GET /api/daily-problem/comments/archives?limit=30`
+- `GET /api/daily-problem/comments?date=2026-05-17&problemKey=2000-A`
+- `POST /api/daily-problem/comments`
+
+Compatibility create payload:
+
+```json
+{
+  "content": "Legacy daily-instance comment",
+  "replyCommentId": null,
+  "dailyProblemDate": "2026-05-17",
+  "problemKey": "2000-A"
+}
+```
+
+## 10. Common Business Error Codes
+
+- `400` invalid params, blank content, oversized content, mismatched submission
+- `401` unauthorized or invalid token
+- `403` admin role required
+- `404` problem, comment, or user not found
+- `409` repeated check-in or cross-problem reply conflict
+- `500` internal server error
+- `503` upstream Codeforces error

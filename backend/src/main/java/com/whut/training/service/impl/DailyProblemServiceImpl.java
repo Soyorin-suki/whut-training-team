@@ -12,7 +12,10 @@ import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.DailyProblemRepository;
 import com.whut.training.repository.UserRepository;
 import com.whut.training.service.CodeforcesApiService;
+import com.whut.training.service.DailyProblemCacheService;
 import com.whut.training.service.DailyProblemService;
+import com.whut.training.service.ProblemFavoriteService;
+import com.whut.training.service.ProblemLikeService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -34,6 +37,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     private final int defaultMaxRating;
     private final int noRepeatDays;
     private final UserRepository userRepository;
+    private final DailyProblemCacheService dailyProblemCacheService;
+    private final ProblemLikeService problemLikeService;
+    private final ProblemFavoriteService problemFavoriteService;
 
     public DailyProblemServiceImpl(
             DailyProblemRepository dailyProblemRepository,
@@ -41,13 +47,19 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             @Value("${app.daily-problem.min-rating:1200}") int defaultMinRating,
             @Value("${app.daily-problem.max-rating:1600}") int defaultMaxRating,
             @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            DailyProblemCacheService dailyProblemCacheService,
+            ProblemLikeService problemLikeService,
+            ProblemFavoriteService problemFavoriteService) {
         this.dailyProblemRepository = dailyProblemRepository;
         this.codeforcesApiService = codeforcesApiService;
         this.defaultMinRating = defaultMinRating;
         this.defaultMaxRating = defaultMaxRating;
         this.noRepeatDays = noRepeatDays;
         this.userRepository = userRepository;
+        this.dailyProblemCacheService = dailyProblemCacheService;
+        this.problemLikeService = problemLikeService;
+        this.problemFavoriteService = problemFavoriteService;
     }
 
     @Scheduled(cron = "${app.daily-problem.cron:0 5 0 * * *}", zone = "${app.daily-problem.zone:Asia/Shanghai}")
@@ -61,13 +73,20 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     }
 
     @Override
+    public DailyProblem resolveTodayProblem() {
+        return ensureDailyProblem(LocalDate.now(), false, "api");
+    }
+
+    @Override
     public DailyProblemTodayResponse getToday(User user) {
-        LocalDate today = LocalDate.now();
-        DailyProblem dailyProblem = ensureDailyProblem(today, false, "api");
+        DailyProblem dailyProblem = resolveTodayProblem();
+        LocalDate today = dailyProblem.date();
+        ProblemLikeSummary likeSummary = getLikeSummary(dailyProblem.problemKey(), user.getId());
+        ProblemFavoriteSummary favoriteSummary = getFavoriteSummary(dailyProblem.problemKey(), user.getId());
         Optional<com.whut.training.domain.entity.UserDailyStatus> statusOptional =
                 dailyProblemRepository.findUserDailyStatus(user.getId(), today);
         return new DailyProblemTodayResponse(
-                toProblemView("DAILY", dailyProblem),
+                toProblemView("DAILY", dailyProblem, likeSummary, favoriteSummary),
                 statusOptional.isPresent(),
                 statusOptional.map(com.whut.training.domain.entity.UserDailyStatus::score).orElse(0)
         );
@@ -75,8 +94,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
     @Override
     public CheckInResultResponse checkIn(User user, Long submissionId) {
-        LocalDate today = LocalDate.now();
-        DailyProblem dailyProblem = ensureDailyProblem(today, false, "api");
+        DailyProblem dailyProblem = resolveTodayProblem();
+        LocalDate today = dailyProblem.date();
+        int awardedScore = 1;
         if (dailyProblemRepository.findUserDailyStatus(user.getId(), today).isPresent()) {
             throw new BusinessException(409, "今日已打卡，请勿重复提交");
         }
@@ -96,7 +116,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 today,
                 submissionId,
                 submissionStatus.verdict(),
-                1
+                awardedScore
         );
         //给当前用户加上daily分数
         User persistedUser = userRepository.findById(user.getId())
@@ -110,7 +130,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                         previousCheckInDate,
                         today
                 );
-        Integer userScore = (persistedUser.getScore() == null ? 0 : persistedUser.getScore()) + dailyProblem.rating();
+        Integer userScore = (persistedUser.getScore() == null ? 0 : persistedUser.getScore()) + awardedScore;
         userRepository.updateUserScoreAndStreakStats(
                 user.getId(),
                 userScore,
@@ -118,7 +138,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 nextStreak.longestStreakDays()
         );
 
-        return new CheckInResultResponse("DAILY", true, submissionId, submissionStatus.verdict(), 1);
+        return new CheckInResultResponse("DAILY", true, submissionId, submissionStatus.verdict(), awardedScore);
     }
 
     @Override
@@ -136,9 +156,25 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 startDate,
                 today
         );
+        Map<String, ProblemLikeSummary> likeStats = problemLikeService.getLikeStats(
+                problems.stream().map(DailyProblem::problemKey).toList(),
+                user.getId()
+        );
+        Map<String, ProblemFavoriteSummary> favoriteStats = problemFavoriteService.getFavoriteStats(
+                problems.stream().map(DailyProblem::problemKey).toList(),
+                user.getId()
+        );
         return problems.stream()
                 .map(problem -> {
                     UserDailyStatus status = statusByDate.get(problem.date());
+                    ProblemLikeSummary likeSummary = likeStats.getOrDefault(
+                            problem.problemKey(),
+                            new ProblemLikeSummary(problem.problemKey(), 0, false)
+                    );
+                    ProblemFavoriteSummary favoriteSummary = favoriteStats.getOrDefault(
+                            problem.problemKey(),
+                            new ProblemFavoriteSummary(problem.problemKey(), false, null)
+                    );
                     return new DailyProblemHistoryItem(
                             problem.date().toString(),
                             problem.problemKey(),
@@ -148,7 +184,11 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                             status != null,
                             status == null ? null : status.submissionId(),
                             status == null ? null : status.verdict(),
-                            status == null ? null : status.score()
+                            status == null ? null : status.score(),
+                            likeSummary.likeCount(),
+                            likeSummary.likedByMe(),
+                            favoriteSummary.favoritedByMe(),
+                            favoriteSummary.favoritedAt()
                     );
                 })
                 .toList();
@@ -156,7 +196,42 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
     @Override
     public List<PracticeHistoryItem> getPracticeHistory(User user, int limit) {
-        return dailyProblemRepository.findCheckedPracticeHistory(user.getId(), limit);
+        List<PracticeHistoryItem> items = dailyProblemRepository.findCheckedPracticeHistory(user.getId(), limit);
+        Map<String, ProblemLikeSummary> likeStats = problemLikeService.getLikeStats(
+                items.stream().map(PracticeHistoryItem::problemKey).toList(),
+                user.getId()
+        );
+        Map<String, ProblemFavoriteSummary> favoriteStats = problemFavoriteService.getFavoriteStats(
+                items.stream().map(PracticeHistoryItem::problemKey).toList(),
+                user.getId()
+        );
+        return items.stream()
+                .map(item -> {
+                    ProblemLikeSummary likeSummary = likeStats.getOrDefault(
+                            item.problemKey(),
+                            new ProblemLikeSummary(item.problemKey(), 0, false)
+                    );
+                    ProblemFavoriteSummary favoriteSummary = favoriteStats.getOrDefault(
+                            item.problemKey(),
+                            new ProblemFavoriteSummary(item.problemKey(), false, null)
+                    );
+                    return new PracticeHistoryItem(
+                            item.drawId(),
+                            item.drawDate(),
+                            item.problemKey(),
+                            item.name(),
+                            item.rating(),
+                            item.sourceUrl(),
+                            item.submissionId(),
+                            item.verdict(),
+                            item.checkedAt(),
+                            likeSummary.likeCount(),
+                            likeSummary.likedByMe(),
+                            favoriteSummary.favoritedByMe(),
+                            favoriteSummary.favoritedAt()
+                    );
+                })
+                .toList();
     }
 
     @Override
@@ -177,6 +252,8 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                                 : "no problem available for this rating range and tags: " + String.join(",", tagFilters)
                 ));
         UserPracticeDraw draw = dailyProblemRepository.insertPracticeDraw(user.getId(), LocalDate.now(), problem);
+        ProblemLikeSummary likeSummary = getLikeSummary(draw.problemKey(), user.getId());
+        ProblemFavoriteSummary favoriteSummary = getFavoriteSummary(draw.problemKey(), user.getId());
         return new PracticeDrawResponse(
                 draw.id(),
                 new ProblemView(
@@ -188,7 +265,11 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                         draw.name(),
                         draw.rating(),
                         draw.tags(),
-                        draw.sourceUrl()
+                        draw.sourceUrl(),
+                        likeSummary.likeCount(),
+                        likeSummary.likedByMe(),
+                        favoriteSummary.favoritedByMe(),
+                        favoriteSummary.favoritedAt()
                 )
         );
     }
@@ -228,17 +309,31 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             throw new BusinessException(403, "admin role required");
         }
         DailyProblem dailyProblem = ensureDailyProblem(LocalDate.now(), true, "admin");
-        return toProblemView("DAILY", dailyProblem);
+        return toProblemView(
+                "DAILY",
+                dailyProblem,
+                getLikeSummary(dailyProblem.problemKey(), adminUser.getId()),
+                getFavoriteSummary(dailyProblem.problemKey(), adminUser.getId())
+        );
     }
 
     private DailyProblem ensureDailyProblem(LocalDate date, boolean forceRegenerate, String generatedBy) {
         synchronized (generationLock) {
             if (!forceRegenerate) {
+                Optional<DailyProblem> cached = dailyProblemCacheService.get(date);
+                if (cached.isPresent()) {
+                    return cached.get();
+                }
                 Optional<DailyProblem> existing = dailyProblemRepository.findDailyByDate(date);
                 if (existing.isPresent()) {
+                    dailyProblemCacheService.put(existing.get());
                     return existing.get();
                 }
             } else {
+                if (dailyProblemRepository.countDailyCheckIns(date) > 0) {
+                    throw new BusinessException(409, "cannot regenerate daily problem after users have checked in");
+                }
+                dailyProblemCacheService.evict(date);
                 dailyProblemRepository.deleteDailyByDate(date);
             }
 
@@ -248,7 +343,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                     .findRandomProblem(defaultMinRating, defaultMaxRating, noRepeatAfterDate)
                     .or(() -> dailyProblemRepository.findRandomProblem(defaultMinRating, defaultMaxRating))
                     .orElseThrow(() -> new BusinessException(500, "failed to select daily problem"));
-            return dailyProblemRepository.insertDailyProblem(date, problem, generatedBy);
+            DailyProblem generated = dailyProblemRepository.insertDailyProblem(date, problem, generatedBy);
+            dailyProblemCacheService.put(generated);
+            return generated;
         }
     }
 
@@ -293,7 +390,18 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         return submissionStatus;
     }
 
-    private ProblemView toProblemView(String type, DailyProblem dailyProblem) {
+    private ProblemLikeSummary getLikeSummary(String problemKey, Long userId) {
+        return problemLikeService.getLikeStats(List.of(problemKey), userId)
+                .getOrDefault(problemKey, new ProblemLikeSummary(problemKey, 0, false));
+    }
+
+    private ProblemFavoriteSummary getFavoriteSummary(String problemKey, Long userId) {
+        return problemFavoriteService.getFavoriteStats(List.of(problemKey), userId)
+                .getOrDefault(problemKey, new ProblemFavoriteSummary(problemKey, false, null));
+    }
+
+    private ProblemView toProblemView(String type, DailyProblem dailyProblem, ProblemLikeSummary likeSummary,
+                                      ProblemFavoriteSummary favoriteSummary) {
         return new ProblemView(
                 type,
                 dailyProblem.date().toString(),
@@ -303,7 +411,11 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 dailyProblem.name(),
                 dailyProblem.rating(),
                 dailyProblem.tags(),
-                dailyProblem.sourceUrl()
+                dailyProblem.sourceUrl(),
+                likeSummary.likeCount(),
+                likeSummary.likedByMe(),
+                favoriteSummary.favoritedByMe(),
+                favoriteSummary.favoritedAt()
         );
     }
 }

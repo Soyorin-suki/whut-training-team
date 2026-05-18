@@ -1,6 +1,7 @@
 package com.whut.training.service.impl;
 
 import com.whut.training.aspect.annotation.ServiceLog;
+import com.whut.training.domain.entity.CfProblem;
 import com.whut.training.domain.entity.User;
 import com.whut.training.repository.DailyProblemRepository;
 import com.whut.training.repository.UserRepository;
@@ -66,6 +67,10 @@ public class CodeforcesUserStatsSyncService {
 
         try {
             List<User> users = userRepository.findAll();
+            if (users.isEmpty()) {
+                return;
+            }
+            ensureProblemPoolAvailable();
             for (User user : users) {
                 syncSingleUser(user);
             }
@@ -97,6 +102,19 @@ public class CodeforcesUserStatsSyncService {
                 stats.solvedProblemCount(),
                 stats.hardSolvedProblemCount()
         );
+    }
+
+    private void ensureProblemPoolAvailable() {
+        if (dailyProblemRepository.countProblems() > 0) {
+            return;
+        }
+
+        List<CfProblem> problems = codeforcesApiService.fetchProblemSet();
+        if (problems.isEmpty()) {
+            log.warn("skip seeding cf_problem before stats sync: failed to fetch problem set");
+            return;
+        }
+        dailyProblemRepository.upsertProblems(problems);
     }
 
     private Optional<SolvedStats> collectSolvedStats(String handle) {

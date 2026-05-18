@@ -2,15 +2,6 @@ package com.whut.training.domain.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.whut.training.domain.enums.UserRole;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-@Data
-@Builder
-@AllArgsConstructor
-@NoArgsConstructor
 public class User {
     private Long id;
     private String username;
@@ -29,6 +20,9 @@ public class User {
     private Integer hardSolvedProblemCount;
     private Integer currentStreakDays;
     private Integer longestStreakDays;
+
+    public User() {
+    }
 
     public User(Long id, String username, String email, String password, UserRole role) {
         this(id, username, email, password, role, null, null, null, null, null);
@@ -144,6 +138,30 @@ public class User {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public Integer getScore() {
+        return score;
+    }
+
+    public void setScore(Integer score) {
+        this.score = score;
+    }
+
+    public Integer getSolvedProblemCount() {
+        return solvedProblemCount;
+    }
+
+    public void setSolvedProblemCount(Integer solvedProblemCount) {
+        this.solvedProblemCount = solvedProblemCount;
+    }
+
+    public Integer getHardSolvedProblemCount() {
+        return hardSolvedProblemCount;
+    }
+
+    public void setHardSolvedProblemCount(Integer hardSolvedProblemCount) {
+        this.hardSolvedProblemCount = hardSolvedProblemCount;
     }
 
     public Integer getCurrentStreakDays() {

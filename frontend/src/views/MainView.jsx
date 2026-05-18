@@ -4,10 +4,15 @@ import {
   checkInToday,
   checkPractice,
   drawPracticeProblem,
+  favoriteProblem,
   getDailyHistory,
+  getMyFavoriteProblems,
   getPracticeHistory,
   getTodayProblem,
-  regenerateTodayByAdmin
+  likeProblem,
+  regenerateTodayByAdmin,
+  unfavoriteProblem,
+  unlikeProblem
 } from "../api/dailyProblem";
 import { getLeaderboard, getMyLeaderboardRank } from "../api/rankings";
 import { logout, updateMyProfile } from "../api/user";
@@ -29,10 +34,13 @@ const PRACTICE_TAG_OPTIONS = [
   "number theory"
 ];
 
+const FAVORITE_PAGE_LIMIT = 50;
+
 const NAV_ITEMS = [
   { key: "overview", label: "门户首页" },
   { key: "daily", label: "每日一题" },
   { key: "practice", label: "自主练习" },
+  { key: "favorites", label: "收藏题目" },
   { key: "leaderboard", label: "积分榜" },
   { key: "profile", label: "个人中心" }
 ];
@@ -123,6 +131,88 @@ function formatScore(score) {
   return Number.isFinite(Number(score)) ? Number(score) : 0;
 }
 
+function normalizeLikeCount(likeCount) {
+  return Number.isFinite(Number(likeCount)) ? Math.max(0, Number(likeCount)) : 0;
+}
+
+function toLikeSummary(problem, likedByMe = Boolean(problem?.likedByMe)) {
+  if (!problem?.problemKey) {
+    return null;
+  }
+
+  const currentLikedByMe = Boolean(problem.likedByMe);
+  const currentLikeCount = normalizeLikeCount(problem.likeCount);
+  const delta = likedByMe === currentLikedByMe ? 0 : likedByMe ? 1 : -1;
+
+  return {
+    problemKey: problem.problemKey,
+    likeCount: Math.max(0, currentLikeCount + delta),
+    likedByMe
+  };
+}
+
+function mergeLikeSummary(target, summary) {
+  if (!target || !summary || target.problemKey !== summary.problemKey) {
+    return target;
+  }
+
+  return {
+    ...target,
+    likeCount: normalizeLikeCount(summary.likeCount),
+    likedByMe: Boolean(summary.likedByMe)
+  };
+}
+
+function toFavoriteSummary(problem, favoritedByMe = Boolean(problem?.favoritedByMe)) {
+  if (!problem?.problemKey) {
+    return null;
+  }
+
+  return {
+    problemKey: problem.problemKey,
+    favoritedByMe,
+    favoritedAt: favoritedByMe ? problem.favoritedAt || new Date().toISOString() : null
+  };
+}
+
+function mergeFavoriteSummary(target, summary) {
+  if (!target || !summary || target.problemKey !== summary.problemKey) {
+    return target;
+  }
+
+  return {
+    ...target,
+    favoritedByMe: Boolean(summary.favoritedByMe),
+    favoritedAt: summary.favoritedByMe ? summary.favoritedAt || target.favoritedAt || new Date().toISOString() : null
+  };
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+}
+
+function getDisplayInitial(text) {
+  const value = String(text || "").trim();
+  return value ? value.charAt(0).toUpperCase() : "?";
+}
+
 function getDailyStatus(todayData) {
   if (!todayData?.problem) {
     return { label: "未生成", tone: "muted" };
@@ -143,7 +233,63 @@ function OverviewStat({ label, value, detail, accent = false }) {
   );
 }
 
-function ProblemCard({ problem, title = "题目详情", emptyText = "当前暂无题目数据。" }) {
+function ProblemLikeButton({ problem, pending = false, onToggleLike }) {
+  if (!problem?.problemKey) {
+    return null;
+  }
+
+  const likedByMe = Boolean(problem.likedByMe);
+  const likeCount = normalizeLikeCount(problem.likeCount);
+
+  return (
+    <button
+      className={`problem-like-button ${likedByMe ? "is-liked" : ""}`}
+      type="button"
+      disabled={pending}
+      onClick={() => onToggleLike?.(problem)}
+    >
+      <span className="problem-like-icon" aria-hidden="true">
+        {likedByMe ? "♥" : "♡"}
+      </span>
+      <span>{likeCount}</span>
+      {pending ? <span className="problem-like-pending">...</span> : null}
+    </button>
+  );
+}
+
+function ProblemFavoriteButton({ problem, pending = false, onToggleFavorite }) {
+  if (!problem?.problemKey) {
+    return null;
+  }
+
+  const favoritedByMe = Boolean(problem.favoritedByMe);
+
+  return (
+    <button
+      className={`problem-favorite-button ${favoritedByMe ? "is-favorited" : ""}`}
+      type="button"
+      disabled={pending}
+      onClick={() => onToggleFavorite?.(problem)}
+    >
+      <span className="problem-favorite-icon" aria-hidden="true">
+        {favoritedByMe ? "★" : "☆"}
+      </span>
+      <span>{favoritedByMe ? "已收藏" : "未收藏"}</span>
+      {pending ? <span className="problem-favorite-pending">...</span> : null}
+    </button>
+  );
+}
+
+function ProblemCard({
+  problem,
+  title = "题目详情",
+  emptyText = "当前暂无题目数据。",
+  liking = false,
+  favoriting = false,
+  onToggleLike,
+  onToggleFavorite,
+  onOpenProblem
+}) {
   if (!problem) {
     return (
       <article className="section-card empty-card">
@@ -166,7 +312,17 @@ function ProblemCard({ problem, title = "题目详情", emptyText = "当前暂�
             {problem.problemIndex}. {problem.name}
           </h3>
         </div>
-        <span className="problem-rating-badge">{problem.rating ?? "未定级"}</span>
+        <div className="problem-card-actions">
+          <span className="problem-rating-badge">{problem.rating ?? "未定级"}</span>
+          <div className="problem-action-stack">
+            <ProblemLikeButton problem={problem} pending={liking} onToggleLike={onToggleLike} />
+            <ProblemFavoriteButton
+              problem={problem}
+              pending={favoriting}
+              onToggleFavorite={onToggleFavorite}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="problem-meta-grid">
@@ -182,14 +338,28 @@ function ProblemCard({ problem, title = "题目详情", emptyText = "当前暂�
         ))}
       </div>
 
-      <a className="text-link" href={problem.sourceUrl} target="_blank" rel="noreferrer">
-        前往 Codeforces 查看题面
-      </a>
+      <div className="problem-card-footer">
+        <button className="ghost-button" type="button" onClick={() => onOpenProblem?.(problem)}>
+          查看详情与评论
+        </button>
+        <a className="text-link" href={problem.sourceUrl} target="_blank" rel="noreferrer">
+          前往 Codeforces 查看题面
+        </a>
+      </div>
     </article>
   );
 }
 
-function EmbeddedProblemCard({ problem, title = "题目详情", emptyText = "当前暂无题目数据。" }) {
+function EmbeddedProblemCard({
+  problem,
+  title = "题目详情",
+  emptyText = "当前暂无题目数据。",
+  liking = false,
+  favoriting = false,
+  onToggleLike,
+  onToggleFavorite,
+  onOpenProblem
+}) {
   if (!problem) {
     return (
       <div className="problem-card problem-card-embedded">
@@ -212,7 +382,17 @@ function EmbeddedProblemCard({ problem, title = "题目详情", emptyText = "当
             {problem.problemIndex}. {problem.name}
           </h3>
         </div>
-        <span className="problem-rating-badge">{problem.rating ?? "未定级"}</span>
+        <div className="problem-card-actions">
+          <span className="problem-rating-badge">{problem.rating ?? "未定级"}</span>
+          <div className="problem-action-stack">
+            <ProblemLikeButton problem={problem} pending={liking} onToggleLike={onToggleLike} />
+            <ProblemFavoriteButton
+              problem={problem}
+              pending={favoriting}
+              onToggleFavorite={onToggleFavorite}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="problem-meta-grid">
@@ -228,14 +408,29 @@ function EmbeddedProblemCard({ problem, title = "题目详情", emptyText = "当
         ))}
       </div>
 
-      <a className="text-link" href={problem.sourceUrl} target="_blank" rel="noreferrer">
-        前往 Codeforces 查看题面
-      </a>
+      <div className="problem-card-footer">
+        <button className="ghost-button" type="button" onClick={() => onOpenProblem?.(problem)}>
+          查看详情与评论
+        </button>
+        <a className="text-link" href={problem.sourceUrl} target="_blank" rel="noreferrer">
+          前往 Codeforces 查看题面
+        </a>
+      </div>
     </div>
   );
 }
 
-function HistoryTimeline({ title, items, type, emptyText }) {
+function HistoryTimeline({
+  title,
+  items,
+  type,
+  emptyText,
+  likingProblemKeys = {},
+  favoritingProblemKeys = {},
+  onToggleLike,
+  onToggleFavorite,
+  onOpenProblem
+}) {
   return (
     <section className="section-card history-card">
       <div className="section-heading">
@@ -271,13 +466,122 @@ function HistoryTimeline({ title, items, type, emptyText }) {
                     {isDaily && item.checkedIn ? ` · +${item.score ?? 0}` : ""}
                   </p>
                 </div>
-                <div className="timeline-status">{status}</div>
+                <div className="timeline-actions">
+                  <div className="timeline-status">{status}</div>
+                  <button className="ghost-button" type="button" onClick={() => onOpenProblem?.(item)}>
+                    查看详情与评论
+                  </button>
+                  <div className="problem-action-stack">
+                    <ProblemLikeButton
+                      problem={item}
+                      pending={Boolean(likingProblemKeys[item.problemKey])}
+                      onToggleLike={onToggleLike}
+                    />
+                    <ProblemFavoriteButton
+                      problem={item}
+                      pending={Boolean(favoritingProblemKeys[item.problemKey])}
+                      onToggleFavorite={onToggleFavorite}
+                    />
+                  </div>
+                </div>
               </article>
             );
           })}
         </div>
       )}
     </section>
+  );
+}
+
+function FavoriteProblemList({
+  items,
+  loading,
+  page,
+  total,
+  limit,
+  pendingProblemKeys = {},
+  onPageChange,
+  onToggleFavorite,
+  onOpenProblem
+}) {
+  const totalPages = Math.max(1, Math.ceil((Number(total) || 0) / Math.max(1, Number(limit) || FAVORITE_PAGE_LIMIT)));
+  const canGoPrev = page > 1;
+  const canGoNext = page < totalPages;
+
+  return (
+    <div className="portal-grid single-column">
+      <section className="section-card">
+        <div className="section-heading section-heading-inline">
+          <div>
+            <p className="section-eyebrow">Favorites</p>
+            <h2>我的收藏题目</h2>
+            <p>按收藏时间倒序展示，daily 和 practice 共用同一收藏池。</p>
+          </div>
+          <div className="favorite-page-meta">
+            <span>共 {Number(total) || 0} 题</span>
+            <span>第 {page} / {totalPages} 页</span>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="empty-copy">正在加载收藏题目...</p>
+        ) : items.length === 0 ? (
+          <p className="empty-copy">当前还没有收藏题目。</p>
+        ) : (
+          <div className="favorite-problem-list">
+            {items.map((item) => (
+              <article className="favorite-problem-item" key={item.problemKey}>
+                <div className="favorite-problem-main">
+                  <div className="favorite-problem-title-row">
+                    <strong>
+                      {item.contestId}
+                      {item.problemIndex}. {item.name}
+                    </strong>
+                    <span className={`favorite-source-badge is-${String(item.sourceType || "UNKNOWN").toLowerCase()}`}>
+                      {item.sourceType || "UNKNOWN"}
+                    </span>
+                  </div>
+                  <p className="favorite-problem-meta">
+                    {item.problemKey} · rating {item.rating ?? "未定级"} · 收藏于 {formatDateTime(item.favoritedAt)}
+                  </p>
+                  <div className="tag-list">
+                    {parseTags(item.tags).map((tag) => (
+                      <span className="tag" key={`${item.problemKey}-${tag}`}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="favorite-problem-actions">
+                  <div className="favorite-problem-link-group">
+                    <button className="ghost-button" type="button" onClick={() => onOpenProblem?.(item)}>
+                      查看详情与评论
+                    </button>
+                    <a className="text-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
+                      查看题面
+                    </a>
+                  </div>
+                  <ProblemFavoriteButton
+                    problem={item}
+                    pending={Boolean(pendingProblemKeys[item.problemKey])}
+                    onToggleFavorite={onToggleFavorite}
+                  />
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <div className="favorite-pagination">
+          <button className="ghost-button" type="button" disabled={!canGoPrev} onClick={() => onPageChange?.(page - 1)}>
+            上一页
+          </button>
+          <button className="ghost-button" type="button" disabled={!canGoNext} onClick={() => onPageChange?.(page + 1)}>
+            下一页
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -342,12 +646,15 @@ function QuickLinkGrid({ onOpen }) {
   );
 }
 
-export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
-  const [activeNav, setActiveNav] = useState("overview");
+export default function MainView({ auth, initialNav = "overview", onLogout, onNavigate, onUserUpdate, onOpenProblem }) {
+  const [activeNav, setActiveNav] = useState(initialNav);
   const [actionBusy, setActionBusy] = useState(false);
   const [dailyPanelLoading, setDailyPanelLoading] = useState(false);
   const [practiceHistoryLoading, setPracticeHistoryLoading] = useState(false);
   const [rankingPreviewLoading, setRankingPreviewLoading] = useState(false);
+  const [favoritePanelLoading, setFavoritePanelLoading] = useState(false);
+  const [likingProblemKeys, setLikingProblemKeys] = useState({});
+  const [favoritingProblemKeys, setFavoritingProblemKeys] = useState({});
   const [message, setMessage] = useState("");
   const [profileEditMode, setProfileEditMode] = useState(false);
 
@@ -363,6 +670,9 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
   const [practiceDraw, setPracticeDraw] = useState(null);
   const [practiceSubmissionId, setPracticeSubmissionId] = useState("");
   const [practiceHistory, setPracticeHistory] = useState([]);
+  const [favoriteProblems, setFavoriteProblems] = useState([]);
+  const [favoritePage, setFavoritePage] = useState(1);
+  const [favoriteTotal, setFavoriteTotal] = useState(0);
 
   const [previewEntries, setPreviewEntries] = useState([]);
   const [currentRankEntry, setCurrentRankEntry] = useState(null);
@@ -397,14 +707,25 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
     setProfileEmail(user?.email || "");
     setProfilePassword("");
     setProfileEditMode(false);
+    setFavoriteProblems([]);
+    setFavoritePage(1);
+    setFavoriteTotal(0);
   }, [user?.id]);
+
+  useEffect(() => {
+    if (initialNav === "admin" && !isAdmin) {
+      setActiveNav("overview");
+      return;
+    }
+    setActiveNav(initialNav);
+  }, [initialNav, isAdmin]);
 
   useEffect(() => {
     if (!user || !tokens) {
       return;
     }
 
-    void loadDailyPanel();
+    void loadDailyPanelData();
     void loadPracticeHistory();
     void loadRankingPreview();
   }, [tokens, user?.id]);
@@ -415,15 +736,18 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
     }
 
     if (activeNav === "daily") {
-      void loadDailyPanel();
+      void loadDailyPanelData();
     }
     if (activeNav === "practice") {
       void loadPracticeHistory();
     }
+    if (activeNav === "favorites") {
+      void loadFavoriteProblems(favoritePage);
+    }
     if (activeNav === "overview") {
       void loadRankingPreview();
     }
-  }, [activeNav, tokens, user?.id]);
+  }, [activeNav, favoritePage, tokens, user?.id]);
 
   useEffect(() => {
     if (!isAdmin && activeNav === "admin") {
@@ -431,29 +755,42 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
     }
   }, [activeNav, isAdmin]);
 
-  async function loadDailyPanel() {
+  async function loadDailyPanelData() {
     if (!tokens) {
       return;
     }
 
     setDailyPanelLoading(true);
     try {
-      const [todayResp, historyResp] = await Promise.all([
+      const [todayResult, historyResult] = await Promise.allSettled([
         getTodayProblem(tokens),
         getDailyHistory(tokens, 14)
       ]);
+      let nextMessage = "";
 
-      if (todayResp.code === 200) {
-        setTodayData(todayResp.data);
-      } else {
-        setMessage(todayResp.message || "获取今日题目失败");
+      if (todayResult.status === "fulfilled") {
+        if (todayResult.value.code === 200) {
+          setTodayData(todayResult.value.data);
+        } else if (!nextMessage) {
+          nextMessage = todayResult.value.message || "Failed to load today's problem";
+        }
+      } else if (!nextMessage) {
+        nextMessage = todayResult.reason?.response?.data?.message || "Failed to load today's problem";
       }
 
-      if (historyResp.code === 200) {
-        setHistory(historyResp.data || []);
+      if (historyResult.status === "fulfilled") {
+        if (historyResult.value.code === 200) {
+          setHistory(historyResult.value.data || []);
+        } else if (!nextMessage) {
+          nextMessage = historyResult.value.message || "Failed to load daily history";
+        }
+      } else if (!nextMessage) {
+        nextMessage = historyResult.reason?.response?.data?.message || "Failed to load daily history";
       }
-    } catch (error) {
-      setMessage(error.response?.data?.message || "加载每日训练数据失败");
+
+      if (nextMessage) {
+        setMessage(nextMessage);
+      }
     } finally {
       setDailyPanelLoading(false);
     }
@@ -474,6 +811,34 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
       // keep silent for background loading
     } finally {
       setPracticeHistoryLoading(false);
+    }
+  }
+
+  async function loadFavoriteProblems(page = favoritePage) {
+    if (!tokens) {
+      return;
+    }
+
+    const targetPage = Math.max(1, Number(page) || 1);
+    setFavoritePanelLoading(true);
+    try {
+      const resp = await getMyFavoriteProblems(tokens, { page: targetPage, limit: FAVORITE_PAGE_LIMIT });
+      if (resp.code === 200) {
+        setFavoriteProblems((resp.data?.items || []).map((item) => ({
+          ...item,
+          favoritedByMe: true
+        })));
+        setFavoriteTotal(Number(resp.data?.total) || 0);
+        if (Number(resp.data?.page) && Number(resp.data.page) !== favoritePage) {
+          setFavoritePage(Number(resp.data.page));
+        }
+      } else {
+        setMessage(resp.message || "获取收藏题目失败");
+      }
+    } catch (error) {
+      setMessage(error.response?.data?.message || "加载收藏题目失败");
+    } finally {
+      setFavoritePanelLoading(false);
     }
   }
 
@@ -500,6 +865,111 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
     } finally {
       setRankingPreviewLoading(false);
     }
+  }
+
+  function applyProblemLikeSummary(summary) {
+    if (!summary?.problemKey) {
+      return;
+    }
+
+    setTodayData((current) => (
+      current
+        ? {
+          ...current,
+          problem: mergeLikeSummary(current.problem, summary)
+        }
+        : current
+    ));
+    setPracticeDraw((current) => (
+      current
+        ? {
+          ...current,
+          problem: mergeLikeSummary(current.problem, summary)
+        }
+        : current
+    ));
+    setHistory((current) => current.map((item) => mergeLikeSummary(item, summary)));
+    setPracticeHistory((current) => current.map((item) => mergeLikeSummary(item, summary)));
+  }
+
+  function applyProblemFavoriteSummary(summary) {
+    if (!summary?.problemKey) {
+      return;
+    }
+
+    setTodayData((current) => (
+      current
+        ? {
+          ...current,
+          problem: mergeFavoriteSummary(current.problem, summary)
+        }
+        : current
+    ));
+    setPracticeDraw((current) => (
+      current
+        ? {
+          ...current,
+          problem: mergeFavoriteSummary(current.problem, summary)
+        }
+        : current
+    ));
+    setHistory((current) => current.map((item) => mergeFavoriteSummary(item, summary)));
+    setPracticeHistory((current) => current.map((item) => mergeFavoriteSummary(item, summary)));
+    setFavoriteProblems((current) => {
+      if (!current.some((item) => item.problemKey === summary.problemKey)) {
+        return current;
+      }
+      if (!summary.favoritedByMe) {
+        return current.filter((item) => item.problemKey !== summary.problemKey);
+      }
+      return current.map((item) => mergeFavoriteSummary(item, summary));
+    });
+  }
+
+  function setProblemLikePending(problemKey, pending) {
+    if (!problemKey) {
+      return;
+    }
+
+    setLikingProblemKeys((current) => {
+      if (pending) {
+        return {
+          ...current,
+          [problemKey]: true
+        };
+      }
+
+      const next = { ...current };
+      delete next[problemKey];
+      return next;
+    });
+  }
+
+  function setProblemFavoritePending(problemKey, pending) {
+    if (!problemKey) {
+      return;
+    }
+
+    setFavoritingProblemKeys((current) => {
+      if (pending) {
+        return {
+          ...current,
+          [problemKey]: true
+        };
+      }
+
+      const next = { ...current };
+      delete next[problemKey];
+      return next;
+    });
+  }
+
+  function handleOpenProblem(problem) {
+    const problemKey = problem?.problemKey;
+    if (!problemKey) {
+      return;
+    }
+    onOpenProblem?.(problemKey, activeNav);
   }
 
   async function handleLogout() {
@@ -536,7 +1006,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
         `打卡成功：submission ${result.submissionId ?? "-"}，verdict ${result.verdict ?? "-"}，积分 +${result.score ?? 0}`
       );
       setDailySubmissionId("");
-      await loadDailyPanel();
+      await loadDailyPanelData();
       await loadRankingPreview();
     } catch (error) {
       setMessage(error.response?.data?.message || "打卡请求失败");
@@ -560,7 +1030,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
       }
 
       setMessage("今日题目已重新生成");
-      await loadDailyPanel();
+      await loadDailyPanelData();
     } catch (error) {
       setMessage(error.response?.data?.message || "重新生成请求失败");
     } finally {
@@ -655,6 +1125,93 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
       setMessage(error.response?.data?.message || "练习题校验请求失败");
     } finally {
       setActionBusy(false);
+    }
+  }
+
+  async function handleToggleLike(problem) {
+    if (!tokens || !problem?.problemKey || likingProblemKeys[problem.problemKey]) {
+      return;
+    }
+
+    const previousSummary = toLikeSummary(problem, Boolean(problem.likedByMe));
+    const optimisticSummary = toLikeSummary(problem, !Boolean(problem.likedByMe));
+    if (!previousSummary || !optimisticSummary) {
+      return;
+    }
+
+    setMessage("");
+    setProblemLikePending(problem.problemKey, true);
+    applyProblemLikeSummary(optimisticSummary);
+    try {
+      const resp = optimisticSummary.likedByMe
+        ? await likeProblem(problem.problemKey, tokens)
+        : await unlikeProblem(problem.problemKey, tokens);
+      if (resp.code !== 200) {
+        applyProblemLikeSummary(previousSummary);
+        setMessage(resp.message || "点赞操作失败");
+        return;
+      }
+
+      applyProblemLikeSummary(resp.data);
+    } catch (error) {
+      applyProblemLikeSummary(previousSummary);
+      setMessage(error.response?.data?.message || "点赞请求失败");
+    } finally {
+      setProblemLikePending(problem.problemKey, false);
+    }
+  }
+
+  async function handleToggleFavorite(problem) {
+    if (!tokens || !problem?.problemKey || favoritingProblemKeys[problem.problemKey]) {
+      return;
+    }
+
+    const previousSummary = toFavoriteSummary(problem, Boolean(problem.favoritedByMe));
+    const optimisticSummary = toFavoriteSummary(problem, !Boolean(problem.favoritedByMe));
+    if (!previousSummary || !optimisticSummary) {
+      return;
+    }
+
+    const previousFavoriteItems = favoriteProblems;
+    const previousFavoriteTotal = favoriteTotal;
+    const targetPageAfterRemoval = problem.favoritedByMe && previousFavoriteItems.length === 1 && favoritePage > 1
+      ? favoritePage - 1
+      : favoritePage;
+
+    setMessage("");
+    setProblemFavoritePending(problem.problemKey, true);
+    applyProblemFavoriteSummary(optimisticSummary);
+    if (problem.favoritedByMe) {
+      setFavoriteTotal((current) => Math.max(0, current - 1));
+    }
+
+    try {
+      const resp = optimisticSummary.favoritedByMe
+        ? await favoriteProblem(problem.problemKey, tokens)
+        : await unfavoriteProblem(problem.problemKey, tokens);
+      if (resp.code !== 200) {
+        applyProblemFavoriteSummary(previousSummary);
+        setFavoriteProblems(previousFavoriteItems);
+        setFavoriteTotal(previousFavoriteTotal);
+        setMessage(resp.message || "收藏操作失败");
+        return;
+      }
+
+      applyProblemFavoriteSummary(resp.data);
+      if (problem.favoritedByMe && activeNav === "favorites") {
+        if (targetPageAfterRemoval !== favoritePage) {
+          setFavoritePage(targetPageAfterRemoval);
+        } else {
+          await loadFavoriteProblems(targetPageAfterRemoval);
+        }
+      }
+    } catch (error) {
+      applyProblemFavoriteSummary(previousSummary);
+      setFavoriteProblems(previousFavoriteItems);
+      setFavoriteTotal(previousFavoriteTotal);
+      setMessage(error.response?.data?.message || "收藏请求失败");
+    } finally {
+      setProblemFavoritePending(problem.problemKey, false);
     }
   }
 
@@ -847,6 +1404,11 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                 problem={todayData?.problem}
                 title="今日训练"
                 emptyText={dailyPanelLoading ? "正在加载今日题目..." : "今日暂无题目数据。"}
+                liking={Boolean(todayData?.problem?.problemKey && likingProblemKeys[todayData.problem.problemKey])}
+                favoriting={Boolean(todayData?.problem?.problemKey && favoritingProblemKeys[todayData.problem.problemKey])}
+                onToggleLike={handleToggleLike}
+                onToggleFavorite={handleToggleFavorite}
+                onOpenProblem={handleOpenProblem}
               />
 
               <div className="split-panel">
@@ -855,12 +1417,22 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                   items={history.slice(0, 5)}
                   type="daily"
                   emptyText={dailyPanelLoading ? "正在加载打卡记录..." : "最近还没有每日打卡记录。"}
+                  likingProblemKeys={likingProblemKeys}
+                  favoritingProblemKeys={favoritingProblemKeys}
+                  onToggleLike={handleToggleLike}
+                  onToggleFavorite={handleToggleFavorite}
+                  onOpenProblem={handleOpenProblem}
                 />
                 <HistoryTimeline
                   title="最近自主练习"
                   items={practiceHistory.slice(0, 5)}
                   type="practice"
                   emptyText={practiceHistoryLoading ? "正在加载练习记录..." : "最近还没有自主练习记录。"}
+                  likingProblemKeys={likingProblemKeys}
+                  favoritingProblemKeys={favoritingProblemKeys}
+                  onToggleLike={handleToggleLike}
+                  onToggleFavorite={handleToggleFavorite}
+                  onOpenProblem={handleOpenProblem}
                 />
               </div>
             </div>
@@ -920,6 +1492,11 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                 problem={todayData?.problem}
                 title="今日题目"
                 emptyText={dailyPanelLoading ? "正在加载今日题目..." : "今日暂无题目数据。"}
+                liking={Boolean(todayData?.problem?.problemKey && likingProblemKeys[todayData.problem.problemKey])}
+                favoriting={Boolean(todayData?.problem?.problemKey && favoritingProblemKeys[todayData.problem.problemKey])}
+                onToggleLike={handleToggleLike}
+                onToggleFavorite={handleToggleFavorite}
+                onOpenProblem={handleOpenProblem}
               />
               <div className="action-strip">
                 <input
@@ -950,6 +1527,11 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
               items={history}
               type="daily"
               emptyText={dailyPanelLoading ? "正在加载记录..." : "暂时没有每日训练记录。"}
+              likingProblemKeys={likingProblemKeys}
+              favoritingProblemKeys={favoritingProblemKeys}
+              onToggleLike={handleToggleLike}
+              onToggleFavorite={handleToggleFavorite}
+              onOpenProblem={handleOpenProblem}
             />
           </div>
         )}
@@ -1035,6 +1617,11 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                 problem={practiceDraw?.problem}
                 title="当前练习题"
                 emptyText="完成条件设置后点击开始抽题。"
+                liking={Boolean(practiceDraw?.problem?.problemKey && likingProblemKeys[practiceDraw.problem.problemKey])}
+                favoriting={Boolean(practiceDraw?.problem?.problemKey && favoritingProblemKeys[practiceDraw.problem.problemKey])}
+                onToggleLike={handleToggleLike}
+                onToggleFavorite={handleToggleFavorite}
+                onOpenProblem={handleOpenProblem}
               />
 
               <div className="action-strip">
@@ -1056,8 +1643,27 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
               items={practiceHistory}
               type="practice"
               emptyText={practiceHistoryLoading ? "正在加载记录..." : "暂时没有自主练习记录。"}
+              likingProblemKeys={likingProblemKeys}
+              favoritingProblemKeys={favoritingProblemKeys}
+              onToggleLike={handleToggleLike}
+              onToggleFavorite={handleToggleFavorite}
+              onOpenProblem={handleOpenProblem}
             />
           </div>
+        )}
+
+        {activeNav === "favorites" && (
+          <FavoriteProblemList
+            items={favoriteProblems}
+            loading={favoritePanelLoading}
+            page={favoritePage}
+            total={favoriteTotal}
+            limit={FAVORITE_PAGE_LIMIT}
+            pendingProblemKeys={favoritingProblemKeys}
+            onPageChange={(nextPage) => setFavoritePage(Math.max(1, nextPage))}
+            onToggleFavorite={handleToggleFavorite}
+            onOpenProblem={handleOpenProblem}
+          />
         )}
 
         {activeNav === "leaderboard" && <LeaderboardView auth={auth} />}

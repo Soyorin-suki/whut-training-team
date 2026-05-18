@@ -9,6 +9,10 @@ public record PracticeHistoryItem(
         String sourceUrl,
         Long submissionId,
         String verdict,
-        String checkedAt
+        String checkedAt,
+        Integer likeCount,
+        boolean likedByMe,
+        boolean favoritedByMe,
+        String favoritedAt
 ) {
 }

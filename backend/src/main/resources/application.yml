@@ -7,6 +7,10 @@ spring:
   datasource:
     driver-class-name: org.sqlite.JDBC
     url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/training.db}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
 
 codeforces:
   base_url: https://codeforces.com/api
@@ -22,10 +26,22 @@ app:
   auth:
     access-token-ttl-seconds: 1800
     refresh-token-ttl-seconds: 604800
+  llm:
+    default-provider: ${APP_LLM_DEFAULT_PROVIDER:}
+    providers:
+      default:
+        type: ${APP_LLM_PROVIDER_TYPE:openai-compatible}
+        base-url: ${APP_LLM_BASE_URL:}
+        api-key: ${APP_LLM_API_KEY:}
+        model: ${APP_LLM_MODEL:}
+        timeout-seconds: ${APP_LLM_TIMEOUT_SECONDS:30}
+  ai-problem:
+    storage-root: ${APP_AI_PROBLEM_STORAGE_ROOT:./data/ai-problems}
   daily-problem:
     min-rating: 1200
     max-rating: 2000
     no-repeat-days: 90
+    cache-ttl: ${APP_DAILY_PROBLEM_CACHE_TTL:1d}
     cron: "0 5 0 * * *"
     sync-cron: "0 0 0 * * MON"
     zone: "Asia/Shanghai"

@@ -26,26 +26,25 @@ class UserStreakBackfillInitializerTest {
 
     @Test
     void backfillsCurrentAndLongestStreaksFromHistory() {
+        LocalDate today = LocalDate.now();
         when(userRepository.findUserIdsRequiringStreakBackfill()).thenReturn(List.of(1L, 2L));
         when(dailyProblemRepository.findAllUserDailyCheckInDates()).thenReturn(Map.of(
                 1L, List.of(
-                        LocalDate.of(2026, 5, 1),
-                        LocalDate.of(2026, 5, 2),
-                        LocalDate.of(2026, 5, 5),
-                        LocalDate.of(2026, 5, 6),
-                        LocalDate.of(2026, 5, 7)
+                        today.minusDays(2),
+                        today.minusDays(1),
+                        today
                 ),
                 2L, List.of(
-                        LocalDate.of(2026, 4, 1),
-                        LocalDate.of(2026, 4, 3),
-                        LocalDate.of(2026, 4, 4)
+                        today.minusDays(10),
+                        today.minusDays(8),
+                        today.minusDays(7)
                 )
         ));
 
         new UserStreakBackfillInitializer(userRepository, dailyProblemRepository).backfill();
 
         verify(userRepository).updateUserStreakStats(1L, 3, 3);
-        verify(userRepository).updateUserStreakStats(2L, 2, 2);
+        verify(userRepository).updateUserStreakStats(2L, 0, 2);
     }
 
     @Test

@@ -112,6 +112,39 @@ class CodeforcesUserStatsSyncServiceIntegrationTest {
         verify(codeforcesApiService, never()).fetchUserSubmissions(eq("admin"), eq(1), eq(1000));
     }
 
+    @Test
+    void seedsProblemPoolBeforeCalculatingHardSolvedCounts() {
+        User alice = createUser("alice");
+
+        when(codeforcesApiService.fetchProblemSet()).thenReturn(List.of(
+                new CfProblem(
+                        "1000-A",
+                        1000,
+                        "A",
+                        "Seeded Hard Problem",
+                        2101,
+                        "",
+                        false,
+                        null,
+                        1,
+                        "https://codeforces.com/problemset/problem/1000/A"
+                )
+        ));
+        when(codeforcesApiService.getUserInfo("alice")).thenReturn(Optional.of(
+                new CodeforcesApiService.CodeforcesUserProfile(1500, 1700, false, 0L, "avatar")
+        ));
+        when(codeforcesApiService.fetchUserSubmissions(eq("alice"), eq(1), eq(1000))).thenReturn(Optional.of(List.of(
+                new CodeforcesApiService.UserSubmission(1L, 1000, "A", "OK", null, Instant.now())
+        )));
+
+        syncService.syncAllUsersOnce();
+
+        User syncedAlice = userRepository.findById(alice.getId()).orElseThrow();
+        assertEquals(1, dailyProblemRepository.countProblems());
+        assertEquals(1, syncedAlice.getSolvedProblemCount());
+        assertEquals(1, syncedAlice.getHardSolvedProblemCount());
+    }
+
     private User createUser(String username) {
         User user = new User(
                 null,

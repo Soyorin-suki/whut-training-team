@@ -144,6 +144,35 @@ public class DailyProblemRepository {
         return Optional.ofNullable(ratings.get(0));
     }
 
+    public Optional<CfProblem> findProblemByKey(String problemKey) {
+        if (problemKey == null || problemKey.isBlank()) {
+            return Optional.empty();
+        }
+        List<CfProblem> rows = jdbcTemplate.query(
+                """
+                        SELECT problem_key, contest_id, problem_index, name, rating, tags,
+                               is_interactive, source_contest_id, solved_count, source_url
+                        FROM cf_problem
+                        WHERE problem_key = ?
+                        """,
+                cfProblemRowMapper,
+                problemKey
+        );
+        return rows.stream().findFirst();
+    }
+
+    public boolean existsProblemKey(String problemKey) {
+        if (problemKey == null || problemKey.isBlank()) {
+            return false;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM cf_problem WHERE problem_key = ?",
+                Integer.class,
+                problemKey
+        );
+        return count != null && count > 0;
+    }
+
     public Optional<CfProblem> findRandomProblem(Integer minRating, Integer maxRating, LocalDate noRepeatAfterDate) {
         String sql = """
                 SELECT problem_key, contest_id, problem_index, name, rating, tags, is_interactive, source_contest_id, solved_count, source_url
@@ -213,6 +242,21 @@ public class DailyProblemRepository {
                 date.toString()
         );
         return rows.stream().findFirst();
+    }
+
+    public boolean existsDailyProblemInstance(LocalDate date, String problemKey) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                        SELECT COUNT(1)
+                        FROM daily_problem
+                        WHERE date = ?
+                          AND problem_key = ?
+                        """,
+                Integer.class,
+                date.toString(),
+                problemKey
+        );
+        return count != null && count > 0;
     }
 
     public DailyProblem insertDailyProblem(LocalDate date, CfProblem problem, String generatedBy) {
@@ -300,6 +344,15 @@ public class DailyProblemRepository {
         );
     }
 
+    public long countDailyCheckIns(LocalDate date) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM user_daily_status WHERE date = ?",
+                Long.class,
+                date.toString()
+        );
+        return count == null ? 0L : count;
+    }
+
     public List<DailyProblemHistoryItem> findDailyHistoryForUser(Long userId, LocalDate startDate, LocalDate endDate) {
         return jdbcTemplate.query(
                 """
@@ -326,7 +379,11 @@ public class DailyProblemRepository {
                         rs.getObject("submission_id") != null,
                         (Long) rs.getObject("submission_id"),
                         rs.getString("verdict"),
-                        (Integer) rs.getObject("score")
+                        (Integer) rs.getObject("score"),
+                        0,
+                        false,
+                        false,
+                        null
                 ),
                 userId,
                 startDate.toString(),
@@ -487,7 +544,11 @@ public class DailyProblemRepository {
                         rs.getString("source_url"),
                         rs.getLong("submission_id"),
                         rs.getString("verdict"),
-                        rs.getString("checked_at")
+                        rs.getString("checked_at"),
+                        0,
+                        false,
+                        false,
+                        null
                 ),
                 userId,
                 safeLimit

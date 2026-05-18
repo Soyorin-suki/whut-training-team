@@ -221,7 +221,11 @@ public class AdminTrainingServiceImpl implements AdminTrainingService {
                 dailyProblem.name(),
                 dailyProblem.rating(),
                 dailyProblem.tags(),
-                dailyProblem.sourceUrl()
+                dailyProblem.sourceUrl(),
+                0,
+                false,
+                false,
+                null
         );
     }
 }
