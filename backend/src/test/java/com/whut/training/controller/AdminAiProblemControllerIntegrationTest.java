@@ -47,10 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AdminAiProblemControllerIntegrationTest {
 
-    private static final Path TEST_DB = Paths.get(
-            System.getProperty("java.io.tmpdir"),
-            "whut-training-admin-ai-problem-test-" + System.nanoTime() + ".db"
-    ).toAbsolutePath();
+    private static final String TEST_DB_NAME = "whut-training-admin-ai-problem-test-" + System.nanoTime();
     private static final Path TEST_STORAGE = Paths.get(
             System.getProperty("java.io.tmpdir"),
             "whut-training-admin-ai-problem-artifacts-" + System.nanoTime()
@@ -58,7 +55,8 @@ class AdminAiProblemControllerIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + TEST_DB.toString().replace("\\", "/"));
+        registry.add("spring.datasource.url",
+                () -> "jdbc:h2:mem:" + TEST_DB_NAME + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
         registry.add("app.ai-problem.storage-root", () -> TEST_STORAGE.toString().replace("\\", "/"));
     }
 

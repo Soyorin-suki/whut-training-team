@@ -4,7 +4,7 @@ WHUT Training Team is a full-stack training portal built with:
 
 - Backend: Spring Boot + Maven
 - Frontend: React + Vite
-- Persistence: SQLite
+- Persistence: MySQL + Liquibase
 - Cache: Redis
 - Auth: Access Token + Refresh Token
 
@@ -62,6 +62,7 @@ cd backend
 mvn spring-boot:run
 ```
 
+- Requires a reachable MySQL instance and Redis instance.
 - Default URL: `http://localhost:8080`
 
 ### Frontend

@@ -7,7 +7,7 @@ import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
 @Component
-@DependsOn("sqliteInitializer")
+@DependsOn("liquibase")
 public class ProblemCommentMigrationInitializer implements ApplicationRunner {
 
     private final ProblemCommentMigrationService problemCommentMigrationService;

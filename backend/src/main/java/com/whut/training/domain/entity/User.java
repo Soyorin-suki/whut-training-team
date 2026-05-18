@@ -18,6 +18,9 @@ public class User {
     private Integer score;
     private Integer solvedProblemCount;
     private Integer hardSolvedProblemCount;
+    private Integer solved800To1400Count;
+    private Integer solved1500To2200Count;
+    private Integer solvedAbove2200Count;
     private Integer currentStreakDays;
     private Integer longestStreakDays;
 
@@ -166,6 +169,30 @@ public class User {
 
     public Integer getCurrentStreakDays() {
         return currentStreakDays;
+    }
+
+    public Integer getSolved800To1400Count() {
+        return solved800To1400Count;
+    }
+
+    public void setSolved800To1400Count(Integer solved800To1400Count) {
+        this.solved800To1400Count = solved800To1400Count;
+    }
+
+    public Integer getSolved1500To2200Count() {
+        return solved1500To2200Count;
+    }
+
+    public void setSolved1500To2200Count(Integer solved1500To2200Count) {
+        this.solved1500To2200Count = solved1500To2200Count;
+    }
+
+    public Integer getSolvedAbove2200Count() {
+        return solvedAbove2200Count;
+    }
+
+    public void setSolvedAbove2200Count(Integer solvedAbove2200Count) {
+        this.solvedAbove2200Count = solvedAbove2200Count;
     }
 
     public void setCurrentStreakDays(Integer currentStreakDays) {

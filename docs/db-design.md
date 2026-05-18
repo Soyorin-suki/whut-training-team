@@ -1,10 +1,11 @@
 # Database Design
 
-The project uses SQLite for durable state and Redis only for cache data.
+The project uses MySQL for durable state and Redis only for cache data.
 
 Notes:
 
-- SQLite tables are initialized by `SqliteInitializer`
+- Liquibase changelogs under `backend/src/main/resources/db/changelog` are the schema source of truth
+- The logical table model below remains valid after the MySQL migration, though physical column types now follow MySQL conventions such as `BIGINT`, `VARCHAR`, `TEXT`, and auto-increment primary keys
 - Relationships are maintained by application logic rather than explicit foreign keys
 - Redis is not part of the relational schema described here
 
@@ -253,5 +254,5 @@ Current cache key in use:
 Notes:
 
 - the cached payload contains the shared daily problem portion
-- user-specific `checkedIn` and `score` stay in SQLite-backed logic
+- user-specific `checkedIn` and `score` stay in relational database backed logic
 - cache is invalidated when today's problem is regenerated

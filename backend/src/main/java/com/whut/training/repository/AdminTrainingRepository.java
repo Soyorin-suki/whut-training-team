@@ -3,6 +3,7 @@ package com.whut.training.repository;
 import com.whut.training.domain.dto.AdminDailyCheckInItem;
 import com.whut.training.domain.dto.AdminDailyPracticeItem;
 import com.whut.training.domain.dto.AdminDailyRecordItem;
+import com.whut.training.domain.dto.AdminTrainingExportRow;
 import com.whut.training.domain.dto.AdminUserTimelineItem;
 import com.whut.training.domain.dto.AdminUserTrainingItem;
 import com.whut.training.domain.dto.ProblemView;
@@ -432,6 +433,34 @@ public class AdminTrainingRepository {
         );
     }
 
+    public List<AdminTrainingExportRow> findTrainingExportRows() {
+        return jdbcTemplate.query(
+                """
+                        SELECT u.username,
+                               u.codeforces_rating,
+                               COALESCE(ds.check_in_days, 0) AS check_in_days,
+                               COALESCE(u.solved_800_to_1400_count, 0) AS solved_800_to_1400_count,
+                               COALESCE(u.solved_1500_to_2200_count, 0) AS solved_1500_to_2200_count,
+                               COALESCE(u.solved_above_2200_count, 0) AS solved_above_2200_count
+                        FROM users u
+                        LEFT JOIN (
+                            SELECT user_id, COUNT(1) AS check_in_days
+                            FROM user_daily_status
+                            GROUP BY user_id
+                        ) ds ON ds.user_id = u.id
+                        ORDER BY u.id ASC
+                        """,
+                (rs, rowNum) -> new AdminTrainingExportRow(
+                        rs.getString("username"),
+                        (Integer) rs.getObject("codeforces_rating"),
+                        rs.getLong("check_in_days"),
+                        parseIntegerValue(rs.getObject("solved_800_to_1400_count")),
+                        parseIntegerValue(rs.getObject("solved_1500_to_2200_count")),
+                        parseIntegerValue(rs.getObject("solved_above_2200_count"))
+                )
+        );
+    }
+
     private String normalizeKeyword(String keyword) {
         if (keyword == null) {
             return null;
@@ -458,5 +487,15 @@ public class AdminTrainingRepository {
             return number.longValue();
         }
         return Long.parseLong(rawValue.toString());
+    }
+
+    private Integer parseIntegerValue(Object rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        if (rawValue instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(rawValue.toString());
     }
 }

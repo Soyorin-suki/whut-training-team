@@ -4,7 +4,8 @@
 
 - `frontend` is the only host-facing entrypoint and exposes `${FRONTEND_PORT}:80` with Nginx.
 - `frontend` proxies `/api/*` to `backend:8080` on the internal `app` bridge network.
-- `backend` stores SQLite data in `backend-data:/app/data` and logs in `backend-logs:/app/logs`.
+- `backend` stores generated AI problem artifacts in `backend-data:/app/data` and logs in `backend-logs:/app/logs`.
+- `mysql` stores relational data in `mysql-data:/var/lib/mysql` and can be exposed on `${MYSQL_PORT}:3306`.
 - `redis` is internal-only and backs the shared daily-problem cache with `redis-data:/data`.
 
 ## Configuration
@@ -15,7 +16,14 @@
 Key variables:
 
 - `FRONTEND_PORT`: host port for the Nginx frontend, default `5173`.
-- `SPRING_DATASOURCE_URL`: backend SQLite URL, default `jdbc:sqlite:/app/data/training.db`.
+- `MYSQL_PORT`: host port for MySQL, default `3306`.
+- `MYSQL_DATABASE`: database name, default `whut_training`.
+- `MYSQL_USER`: application MySQL user, default `training`.
+- `MYSQL_PASSWORD`: application MySQL password, default `training123`.
+- `MYSQL_ROOT_PASSWORD`: MySQL root password, default `root123`.
+- `SPRING_DATASOURCE_URL`: backend MySQL URL, default `jdbc:mysql://mysql:3306/whut_training?...`.
+- `SPRING_DATASOURCE_USERNAME`: backend datasource username, default `training`.
+- `SPRING_DATASOURCE_PASSWORD`: backend datasource password, default `training123`.
 - `SPRING_DATA_REDIS_HOST`: Redis hostname inside compose, default `redis`.
 - `SPRING_DATA_REDIS_PORT`: Redis port inside compose, default `6379`.
 - `APP_DAILY_PROBLEM_CACHE_TTL`: daily-problem cache TTL, default `1d`.
@@ -76,7 +84,7 @@ Reset containers and persistent data:
 docker compose down -v
 ```
 
-Use `down -v` carefully. It removes SQLite and Redis volumes, so cached data and persisted users are rebuilt from scratch.
+Use `down -v` carefully. It removes MySQL, Redis, and backend artifact volumes, so persisted relational data and generated files are rebuilt from scratch.
 
 ## Notes
 
@@ -84,4 +92,5 @@ Use `down -v` carefully. It removes SQLite and Redis volumes, so cached data and
 - Frontend and backend images are tagged as local compose images: `whut-training-team/frontend:local` and `whut-training-team/backend:local`.
 - The backend image build uses `backend/docker-settings.xml` plus Maven retry flags to make dependency downloads less fragile during container builds.
 - `backend/.dockerignore` excludes the workspace-local `.m2` cache so Maven artifacts do not bloat the build context.
-- Rebuilding containers does not reset the SQLite database unless you also remove `backend-data`.
+- Schema creation and future DDL changes are managed by Liquibase on backend startup.
+- Rebuilding containers does not reset MySQL data unless you also remove `mysql-data`.

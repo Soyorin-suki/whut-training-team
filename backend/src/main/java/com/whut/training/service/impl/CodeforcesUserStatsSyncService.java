@@ -28,10 +28,16 @@ public class CodeforcesUserStatsSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(CodeforcesUserStatsSyncService.class);
     private static final int USER_STATUS_PAGE_SIZE = 1000;
+    private static final int RATING_BUCKET_LOW_MIN = 800;
+    private static final int RATING_BUCKET_LOW_MAX = 1400;
+    private static final int RATING_BUCKET_MID_MIN = 1500;
+    private static final int RATING_BUCKET_MID_MAX = 2200;
+    private static final int RATING_BUCKET_HIGH_MIN = 2201;
 
     private final UserRepository userRepository;
     private final CodeforcesApiService codeforcesApiService;
     private final DailyProblemRepository dailyProblemRepository;
+    private final boolean userStatsSyncEnabled;
     private final int hardProblemThreshold;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -39,16 +45,21 @@ public class CodeforcesUserStatsSyncService {
             UserRepository userRepository,
             CodeforcesApiService codeforcesApiService,
             DailyProblemRepository dailyProblemRepository,
+            @Value("${app.codeforces.user-stats-sync-enabled:true}") boolean userStatsSyncEnabled,
             @Value("${app.codeforces.hard-problem-threshold:2000}") int hardProblemThreshold
     ) {
         this.userRepository = userRepository;
         this.codeforcesApiService = codeforcesApiService;
         this.dailyProblemRepository = dailyProblemRepository;
+        this.userStatsSyncEnabled = userStatsSyncEnabled;
         this.hardProblemThreshold = hardProblemThreshold;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void syncOnApplicationReady() {
+        if (!userStatsSyncEnabled) {
+            return;
+        }
         syncAllUsersOnce();
     }
 
@@ -57,6 +68,9 @@ public class CodeforcesUserStatsSyncService {
             zone = "${app.codeforces.user-stats-sync-zone:Asia/Shanghai}"
     )
     public void syncOnSchedule() {
+        if (!userStatsSyncEnabled) {
+            return;
+        }
         syncAllUsersOnce();
     }
 
@@ -100,7 +114,10 @@ public class CodeforcesUserStatsSyncService {
         userRepository.updateUserSolvedProblemStats(
                 user.getId(),
                 stats.solvedProblemCount(),
-                stats.hardSolvedProblemCount()
+                stats.hardSolvedProblemCount(),
+                stats.solved800To1400Count(),
+                stats.solved1500To2200Count(),
+                stats.solvedAbove2200Count()
         );
     }
 
@@ -158,19 +175,45 @@ public class CodeforcesUserStatsSyncService {
         }
 
         int hardSolvedProblemCount = 0;
+        int solved800To1400Count = 0;
+        int solved1500To2200Count = 0;
+        int solvedAbove2200Count = 0;
         for (String problemKey : solvedProblemKeys) {
             Integer rating = problemRatings.get(problemKey);
             if (rating == null) {
                 rating = dailyProblemRepository.findProblemRatingByKey(problemKey).orElse(null);
+            }
+            if (rating != null) {
+                if (rating >= RATING_BUCKET_LOW_MIN && rating <= RATING_BUCKET_LOW_MAX) {
+                    solved800To1400Count++;
+                }
+                if (rating >= RATING_BUCKET_MID_MIN && rating <= RATING_BUCKET_MID_MAX) {
+                    solved1500To2200Count++;
+                }
+                if (rating >= RATING_BUCKET_HIGH_MIN) {
+                    solvedAbove2200Count++;
+                }
             }
             if (rating != null && rating > hardProblemThreshold) {
                 hardSolvedProblemCount++;
             }
         }
 
-        return Optional.of(new SolvedStats(solvedProblemKeys.size(), hardSolvedProblemCount));
+        return Optional.of(new SolvedStats(
+                solvedProblemKeys.size(),
+                hardSolvedProblemCount,
+                solved800To1400Count,
+                solved1500To2200Count,
+                solvedAbove2200Count
+        ));
     }
 
-    private record SolvedStats(int solvedProblemCount, int hardSolvedProblemCount) {
+    private record SolvedStats(
+            int solvedProblemCount,
+            int hardSolvedProblemCount,
+            int solved800To1400Count,
+            int solved1500To2200Count,
+            int solvedAbove2200Count
+    ) {
     }
 }

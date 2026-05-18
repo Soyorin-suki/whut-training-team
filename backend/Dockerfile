@@ -16,14 +16,15 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-ENV SPRING_DATASOURCE_URL=jdbc:sqlite:/app/data/training.db \
+ENV SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/whut_training?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true \
+    SPRING_DATASOURCE_USERNAME=training \
+    SPRING_DATASOURCE_PASSWORD=training123 \
     SPRING_DATA_REDIS_HOST=redis \
     SPRING_DATA_REDIS_PORT=6379 \
     APP_DAILY_PROBLEM_CACHE_TTL=1d \
     JAVA_OPTS=""
 
-RUN apk add --no-cache wget \
-  && mkdir -p /app/data /app/logs
+RUN mkdir -p /app/data /app/logs
 
 COPY --from=build /workspace/target/*.jar /app/app.jar
 

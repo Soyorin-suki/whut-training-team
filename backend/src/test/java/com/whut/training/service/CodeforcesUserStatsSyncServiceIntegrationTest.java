@@ -32,14 +32,12 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(properties = "spring.task.scheduling.enabled=false")
 class CodeforcesUserStatsSyncServiceIntegrationTest {
 
-    private static final Path TEST_DB = Paths.get(
-            System.getProperty("java.io.tmpdir"),
-            "whut-training-codeforces-sync-test-" + System.nanoTime() + ".db"
-    ).toAbsolutePath();
+    private static final String TEST_DB_NAME = "whut-training-codeforces-sync-test-" + System.nanoTime();
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + TEST_DB.toString().replace("\\", "/"));
+        registry.add("spring.datasource.url",
+                () -> "jdbc:h2:mem:" + TEST_DB_NAME + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
     }
 
     @Autowired
@@ -78,13 +76,25 @@ class CodeforcesUserStatsSyncServiceIntegrationTest {
                         "1000-A",
                         1000,
                         "A",
-                        "Hard Problem",
-                        2101,
+                        "Very Hard Problem",
+                        2301,
                         "",
                         false,
                         null,
                         1,
                         "https://codeforces.com/problemset/problem/1000/A"
+                ),
+                new CfProblem(
+                        "1003-D",
+                        1003,
+                        "D",
+                        "Beginner Problem",
+                        1300,
+                        "",
+                        false,
+                        null,
+                        1,
+                        "https://codeforces.com/problemset/problem/1003/D"
                 )
         ));
 
@@ -96,18 +106,25 @@ class CodeforcesUserStatsSyncServiceIntegrationTest {
                 new CodeforcesApiService.UserSubmission(1L, 1000, "A", "OK", null, Instant.now()),
                 new CodeforcesApiService.UserSubmission(2L, 1000, "A", "OK", null, Instant.now()),
                 new CodeforcesApiService.UserSubmission(3L, 1001, "B", "OK", 1500, Instant.now()),
-                new CodeforcesApiService.UserSubmission(4L, 1002, "C", "WRONG_ANSWER", 2300, Instant.now())
+                new CodeforcesApiService.UserSubmission(4L, 1003, "D", "OK", null, Instant.now()),
+                new CodeforcesApiService.UserSubmission(5L, 1002, "C", "WRONG_ANSWER", 2300, Instant.now())
         )));
 
         syncService.syncAllUsersOnce();
 
         User syncedAlice = userRepository.findById(alice.getId()).orElseThrow();
-        assertEquals(2, syncedAlice.getSolvedProblemCount());
+        assertEquals(3, syncedAlice.getSolvedProblemCount());
         assertEquals(1, syncedAlice.getHardSolvedProblemCount());
+        assertEquals(1, syncedAlice.getSolved800To1400Count());
+        assertEquals(1, syncedAlice.getSolved1500To2200Count());
+        assertEquals(1, syncedAlice.getSolvedAbove2200Count());
 
         User skippedAdmin = userRepository.findById(admin.getId()).orElseThrow();
         assertEquals(0, skippedAdmin.getSolvedProblemCount());
         assertEquals(0, skippedAdmin.getHardSolvedProblemCount());
+        assertEquals(0, skippedAdmin.getSolved800To1400Count());
+        assertEquals(0, skippedAdmin.getSolved1500To2200Count());
+        assertEquals(0, skippedAdmin.getSolvedAbove2200Count());
 
         verify(codeforcesApiService, never()).fetchUserSubmissions(eq("admin"), eq(1), eq(1000));
     }
@@ -122,7 +139,7 @@ class CodeforcesUserStatsSyncServiceIntegrationTest {
                         1000,
                         "A",
                         "Seeded Hard Problem",
-                        2101,
+                        2301,
                         "",
                         false,
                         null,
@@ -143,6 +160,9 @@ class CodeforcesUserStatsSyncServiceIntegrationTest {
         assertEquals(1, dailyProblemRepository.countProblems());
         assertEquals(1, syncedAlice.getSolvedProblemCount());
         assertEquals(1, syncedAlice.getHardSolvedProblemCount());
+        assertEquals(0, syncedAlice.getSolved800To1400Count());
+        assertEquals(0, syncedAlice.getSolved1500To2200Count());
+        assertEquals(1, syncedAlice.getSolvedAbove2200Count());
     }
 
     private User createUser(String username) {

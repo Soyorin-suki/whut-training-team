@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getUserInitial } from "../auth";
 import { regenerateTodayByAdmin } from "../api/dailyProblem";
 import {
+  downloadAdminTrainingExport,
   getAdminDailyRecordDetail,
   getAdminDailyRecords,
   getAdminTrainingOverview,
@@ -66,6 +67,51 @@ function createEmptyPage(pageSize) {
     total: 0,
     entries: []
   };
+}
+
+function extractDownloadFilename(disposition) {
+  if (!disposition) {
+    return "admin-training-export.xlsx";
+  }
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1].trim());
+  }
+
+  const quotedMatch = disposition.match(/filename=\"?([^\";]+)\"?/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1].trim();
+  }
+
+  return "admin-training-export.xlsx";
+}
+
+async function readBlobErrorMessage(error, fallbackMessage) {
+  const blob = error?.response?.data;
+  if (typeof Blob !== "undefined" && blob instanceof Blob) {
+    try {
+      const payload = JSON.parse(await blob.text());
+      if (payload?.message) {
+        return payload.message;
+      }
+    } catch {
+      return fallbackMessage;
+    }
+  }
+
+  return error?.response?.data?.message || error?.message || fallbackMessage;
+}
+
+function triggerBlobDownload(blob, filename) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 function AdminMetricCard({ label, value, detail, accent = false }) {
@@ -162,13 +208,15 @@ export default function AdminTrainingView({ auth }) {
     message: "",
     data: null
   });
-  const [actionBusy, setActionBusy] = useState(false);
+  const [regenerateBusy, setRegenerateBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
 
   const selectedDailyRecord = dailyState.entries.find((item) => item.date === selectedDailyDate) || null;
   const selectedUserRecord = userState.entries.find((item) => item.userId === selectedUserId) || null;
   const dailyPageCount = dailyState.total > 0 ? Math.ceil(dailyState.total / dailyState.pageSize) : 1;
   const userPageCount = userState.total > 0 ? Math.ceil(userState.total / userState.pageSize) : 1;
+  const actionBusy = regenerateBusy || exportBusy;
 
   useEffect(() => {
     if (!tokens) {
@@ -433,7 +481,7 @@ export default function AdminTrainingView({ auth }) {
       return;
     }
 
-    setActionBusy(true);
+    setRegenerateBusy(true);
     setActionMessage("");
     try {
       const resp = await regenerateTodayByAdmin(tokens);
@@ -442,7 +490,7 @@ export default function AdminTrainingView({ auth }) {
         return;
       }
 
-      setActionMessage("今日题目已重新生成。");
+      setActionMessage("Today's problem has been regenerated.");
       await reloadOverview();
       await reloadDailyRecords(dailyState.page);
       if (selectedDailyDate) {
@@ -451,7 +499,26 @@ export default function AdminTrainingView({ auth }) {
     } catch (error) {
       setActionMessage(error.response?.data?.message || "重新生成今日题目失败");
     } finally {
-      setActionBusy(false);
+      setRegenerateBusy(false);
+    }
+  }
+
+  async function handleExport() {
+    if (!tokens || actionBusy) {
+      return;
+    }
+
+    setExportBusy(true);
+    setActionMessage("");
+    try {
+      const response = await downloadAdminTrainingExport(tokens);
+      const filename = extractDownloadFilename(response.headers?.["content-disposition"]);
+      triggerBlobDownload(response.data, filename);
+      setActionMessage(`Export ready: ${filename}`);
+    } catch (error) {
+      setActionMessage(await readBlobErrorMessage(error, "Failed to export training data"));
+    } finally {
+      setExportBusy(false);
     }
   }
 
@@ -464,9 +531,14 @@ export default function AdminTrainingView({ auth }) {
             <h2>训练数据看板</h2>
             <p>按日期和用户查看训练行为、打卡明细、连续打卡表现与练习轨迹。</p>
           </div>
-          <button className="primary-button" type="button" disabled={actionBusy} onClick={handleRegenerate}>
-            {actionBusy ? "处理中..." : "重生今日题目"}
-          </button>
+          <div className="admin-filter-row">
+            <button className="ghost-button" type="button" disabled={actionBusy} onClick={handleExport}>
+              {exportBusy ? "Exporting..." : "导出训练数据"}
+            </button>
+            <button className="primary-button" type="button" disabled={actionBusy} onClick={handleRegenerate}>
+              {regenerateBusy ? "处理中..." : "重新生成今日题目"}
+            </button>
+          </div>
         </div>
         {actionMessage ? <p className="system-message">{actionMessage}</p> : null}
       </article>

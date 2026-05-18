@@ -47,3 +47,11 @@ export async function getAdminUserTimeline(userId, params, tokens) {
   });
   return res.data;
 }
+
+export async function downloadAdminTrainingExport(tokens) {
+  return http.get("/api/admin/training/export", {
+    headers: authHeaders(tokens),
+    responseType: "blob",
+    timeout: 20000
+  });
+}

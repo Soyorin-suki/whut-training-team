@@ -14,6 +14,7 @@ import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.AdminTrainingRepository;
 import com.whut.training.repository.DailyProblemRepository;
 import com.whut.training.repository.UserRepository;
+import com.whut.training.service.AdminTrainingExportWorkbookWriter;
 import com.whut.training.service.AdminTrainingService;
 import org.springframework.stereotype.Service;
 
@@ -26,15 +27,18 @@ public class AdminTrainingServiceImpl implements AdminTrainingService {
     private final AdminTrainingRepository adminTrainingRepository;
     private final DailyProblemRepository dailyProblemRepository;
     private final UserRepository userRepository;
+    private final AdminTrainingExportWorkbookWriter adminTrainingExportWorkbookWriter;
 
     public AdminTrainingServiceImpl(
             AdminTrainingRepository adminTrainingRepository,
             DailyProblemRepository dailyProblemRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            AdminTrainingExportWorkbookWriter adminTrainingExportWorkbookWriter
     ) {
         this.adminTrainingRepository = adminTrainingRepository;
         this.dailyProblemRepository = dailyProblemRepository;
         this.userRepository = userRepository;
+        this.adminTrainingExportWorkbookWriter = adminTrainingExportWorkbookWriter;
     }
 
     @Override
@@ -170,6 +174,19 @@ public class AdminTrainingServiceImpl implements AdminTrainingService {
                 user.getCurrentStreakDays(),
                 user.getLongestStreakDays(),
                 adminTrainingRepository.findUserTimeline(userId, resolvedLimit)
+        );
+    }
+
+    @Override
+    public ExportPayload exportTrainingData(User adminUser) {
+        requireAdmin(adminUser);
+
+        byte[] content = adminTrainingExportWorkbookWriter.writeWorkbook(
+                adminTrainingRepository.findTrainingExportRows()
+        );
+        return new ExportPayload(
+                "admin-training-export-" + LocalDate.now() + ".xlsx",
+                content
         );
     }
 

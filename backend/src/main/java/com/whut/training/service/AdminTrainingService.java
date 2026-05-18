@@ -17,4 +17,9 @@ public interface AdminTrainingService {
     AdminUserTrainingPageResponse getUserTrainingPage(User adminUser, String keyword, String page, String pageSize);
 
     AdminUserTimelineResponse getUserTimeline(User adminUser, Long userId, String limit);
+
+    ExportPayload exportTrainingData(User adminUser);
+
+    record ExportPayload(String fileName, byte[] content) {
+    }
 }

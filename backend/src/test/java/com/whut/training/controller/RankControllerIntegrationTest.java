@@ -27,14 +27,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class RankControllerIntegrationTest {
 
-    private static final Path TEST_DB = Paths.get(
-            System.getProperty("java.io.tmpdir"),
-            "whut-training-rank-test-" + System.nanoTime() + ".db"
-    ).toAbsolutePath();
+    private static final String TEST_DB_NAME = "whut-training-rank-test-" + System.nanoTime();
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + TEST_DB.toString().replace("\\", "/"));
+        registry.add("spring.datasource.url",
+                () -> "jdbc:h2:mem:" + TEST_DB_NAME + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
     }
 
     @Autowired
@@ -134,9 +132,9 @@ class RankControllerIntegrationTest {
         User bob = createUser("bob", 20);
         User carol = createUser("carol", 30);
 
-        userRepository.updateUserSolvedProblemStats(alice.getId(), 120, 8);
-        userRepository.updateUserSolvedProblemStats(bob.getId(), 120, 5);
-        userRepository.updateUserSolvedProblemStats(carol.getId(), 80, 12);
+        userRepository.updateUserSolvedProblemStats(alice.getId(), 120, 8, 0, 0, 0);
+        userRepository.updateUserSolvedProblemStats(bob.getId(), 120, 5, 0, 0, 0);
+        userRepository.updateUserSolvedProblemStats(carol.getId(), 80, 12, 0, 0, 0);
 
         String accessToken = "access-bob";
         String refreshToken = "refresh-bob";

@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-@DependsOn("sqliteInitializer")
+@DependsOn("liquibase")
 public class UserStreakBackfillInitializer {
 
     private final UserRepository userRepository;

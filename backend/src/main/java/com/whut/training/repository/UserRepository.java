@@ -31,6 +31,9 @@ public class UserRepository {
         user.setScore(parseIntegerValue(rs.getObject("score")));
         user.setSolvedProblemCount(parseIntegerValue(rs.getObject("solved_problem_count")));
         user.setHardSolvedProblemCount(parseIntegerValue(rs.getObject("hard_solved_problem_count")));
+        user.setSolved800To1400Count(parseIntegerValue(rs.getObject("solved_800_to_1400_count")));
+        user.setSolved1500To2200Count(parseIntegerValue(rs.getObject("solved_1500_to_2200_count")));
+        user.setSolvedAbove2200Count(parseIntegerValue(rs.getObject("solved_above_2200_count")));
         user.setCurrentStreakDays(parseIntegerValue(rs.getObject("current_streak_days")));
         user.setLongestStreakDays(parseIntegerValue(rs.getObject("longest_streak_days")));
         return user;
@@ -50,11 +53,14 @@ public class UserRepository {
         Integer score = user.getScore() == null ? 0 : user.getScore();
         Integer solvedProblemCount = user.getSolvedProblemCount() == null ? 0 : user.getSolvedProblemCount();
         Integer hardSolvedProblemCount = user.getHardSolvedProblemCount() == null ? 0 : user.getHardSolvedProblemCount();
+        Integer solved800To1400Count = user.getSolved800To1400Count() == null ? 0 : user.getSolved800To1400Count();
+        Integer solved1500To2200Count = user.getSolved1500To2200Count() == null ? 0 : user.getSolved1500To2200Count();
+        Integer solvedAbove2200Count = user.getSolvedAbove2200Count() == null ? 0 : user.getSolvedAbove2200Count();
         Integer currentStreakDays = user.getCurrentStreakDays() == null ? 0 : user.getCurrentStreakDays();
         Integer longestStreakDays = user.getLongestStreakDays() == null ? 0 : user.getLongestStreakDays();
         if (user.getId() == null) {
             jdbcTemplate.update(
-                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, solved_800_to_1400_count, solved_1500_to_2200_count, solved_above_2200_count, current_streak_days, longest_streak_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     user.getUsername(),
                     user.getEmail(),
                     user.getPassword(),
@@ -68,6 +74,9 @@ public class UserRepository {
                     score,
                     solvedProblemCount,
                     hardSolvedProblemCount,
+                    solved800To1400Count,
+                    solved1500To2200Count,
+                    solvedAbove2200Count,
                     currentStreakDays,
                     longestStreakDays
             );
@@ -80,13 +89,16 @@ public class UserRepository {
             user.setScore(score);
             user.setSolvedProblemCount(solvedProblemCount);
             user.setHardSolvedProblemCount(hardSolvedProblemCount);
+            user.setSolved800To1400Count(solved800To1400Count);
+            user.setSolved1500To2200Count(solved1500To2200Count);
+            user.setSolvedAbove2200Count(solvedAbove2200Count);
             user.setCurrentStreakDays(currentStreakDays);
             user.setLongestStreakDays(longestStreakDays);
             return user;
         }
 
         jdbcTemplate.update(
-                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, score = ?, solved_problem_count = ?, hard_solved_problem_count = ?, current_streak_days = ?, longest_streak_days = ? WHERE id = ?",
+                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, score = ?, solved_problem_count = ?, hard_solved_problem_count = ?, solved_800_to_1400_count = ?, solved_1500_to_2200_count = ?, solved_above_2200_count = ?, current_streak_days = ?, longest_streak_days = ? WHERE id = ?",
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
@@ -100,6 +112,9 @@ public class UserRepository {
                 score,
                 solvedProblemCount,
                 hardSolvedProblemCount,
+                solved800To1400Count,
+                solved1500To2200Count,
+                solvedAbove2200Count,
                 currentStreakDays,
                 longestStreakDays,
                 user.getId()
@@ -107,6 +122,9 @@ public class UserRepository {
         user.setScore(score);
         user.setSolvedProblemCount(solvedProblemCount);
         user.setHardSolvedProblemCount(hardSolvedProblemCount);
+        user.setSolved800To1400Count(solved800To1400Count);
+        user.setSolved1500To2200Count(solved1500To2200Count);
+        user.setSolvedAbove2200Count(solvedAbove2200Count);
         user.setCurrentStreakDays(currentStreakDays);
         user.setLongestStreakDays(longestStreakDays);
         return user;
@@ -114,14 +132,14 @@ public class UserRepository {
 
     public List<User> findAll() {
         return jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days FROM users ORDER BY id ASC",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, solved_800_to_1400_count, solved_1500_to_2200_count, solved_above_2200_count, current_streak_days, longest_streak_days FROM users ORDER BY id ASC",
                 userRowMapper
         );
     }
 
     public Optional<User> findById(Long id) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days FROM users WHERE id = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, solved_800_to_1400_count, solved_1500_to_2200_count, solved_above_2200_count, current_streak_days, longest_streak_days FROM users WHERE id = ?",
                 userRowMapper,
                 id
         );
@@ -130,7 +148,7 @@ public class UserRepository {
 
     public Optional<User> findByUsername(String username) {
         List<User> users = jdbcTemplate.query(
-                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, current_streak_days, longest_streak_days FROM users WHERE username = ?",
+                "SELECT id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, score, solved_problem_count, hard_solved_problem_count, solved_800_to_1400_count, solved_1500_to_2200_count, solved_above_2200_count, current_streak_days, longest_streak_days FROM users WHERE username = ?",
                 userRowMapper,
                 username
         );
@@ -155,11 +173,21 @@ public class UserRepository {
         return rows > 0;
     }
 
-    public boolean updateUserSolvedProblemStats(Long id, Integer solvedProblemCount, Integer hardSolvedProblemCount) {
+    public boolean updateUserSolvedProblemStats(
+            Long id,
+            Integer solvedProblemCount,
+            Integer hardSolvedProblemCount,
+            Integer solved800To1400Count,
+            Integer solved1500To2200Count,
+            Integer solvedAbove2200Count
+    ) {
         int rows = jdbcTemplate.update(
-                "UPDATE users SET solved_problem_count = ?, hard_solved_problem_count = ? WHERE id = ?",
+                "UPDATE users SET solved_problem_count = ?, hard_solved_problem_count = ?, solved_800_to_1400_count = ?, solved_1500_to_2200_count = ?, solved_above_2200_count = ? WHERE id = ?",
                 solvedProblemCount == null ? 0 : solvedProblemCount,
                 hardSolvedProblemCount == null ? 0 : hardSolvedProblemCount,
+                solved800To1400Count == null ? 0 : solved800To1400Count,
+                solved1500To2200Count == null ? 0 : solved1500To2200Count,
+                solvedAbove2200Count == null ? 0 : solvedAbove2200Count,
                 id
         );
         return rows > 0;

@@ -18,6 +18,7 @@ networks:
 volumes:
   backend-data:
   backend-logs:
+  mysql-data:
   redis-data:
 
 services:
@@ -28,10 +29,14 @@ services:
       dockerfile: Dockerfile
     image: whut-training-team/backend:local
     depends_on:
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:sqlite:/app/data/training.db}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/whut_training?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-training}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-training123}
       SPRING_DATA_REDIS_HOST: ${SPRING_DATA_REDIS_HOST:-redis}
       SPRING_DATA_REDIS_PORT: ${SPRING_DATA_REDIS_PORT:-6379}
       APP_DAILY_PROBLEM_CACHE_TTL: ${APP_DAILY_PROBLEM_CACHE_TTL:-1d}
@@ -48,6 +53,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  mysql:
+    <<: *service-defaults
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-whut_training}
+      MYSQL_USER: ${MYSQL_USER:-training}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-training123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   redis:
     <<: *service-defaults

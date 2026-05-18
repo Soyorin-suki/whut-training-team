@@ -89,17 +89,17 @@ public class DailyProblemRepository {
                             problem_key, contest_id, problem_index, name, rating, tags,
                             is_interactive, source_contest_id, solved_count, source_url, last_synced_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(problem_key) DO UPDATE SET
-                            contest_id = excluded.contest_id,
-                            problem_index = excluded.problem_index,
-                            name = excluded.name,
-                            rating = excluded.rating,
-                            tags = excluded.tags,
-                            is_interactive = excluded.is_interactive,
-                            source_contest_id = excluded.source_contest_id,
-                            solved_count = excluded.solved_count,
-                            source_url = excluded.source_url,
-                            last_synced_at = excluded.last_synced_at
+                        ON DUPLICATE KEY UPDATE
+                            contest_id = VALUES(contest_id),
+                            problem_index = VALUES(problem_index),
+                            name = VALUES(name),
+                            rating = VALUES(rating),
+                            tags = VALUES(tags),
+                            is_interactive = VALUES(is_interactive),
+                            source_contest_id = VALUES(source_contest_id),
+                            solved_count = VALUES(solved_count),
+                            source_url = VALUES(source_url),
+                            last_synced_at = VALUES(last_synced_at)
                         """,
                 problems,
                 300,
@@ -186,7 +186,7 @@ public class DailyProblemRepository {
                     WHERE d.problem_key = p.problem_key
                       AND d.date >= ?
                   )
-                ORDER BY RANDOM()
+                ORDER BY RAND()
                 LIMIT 1
                 """;
         List<CfProblem> rows = jdbcTemplate.query(sql, cfProblemRowMapper, minRating, maxRating, noRepeatAfterDate.toString());
@@ -201,7 +201,7 @@ public class DailyProblemRepository {
                   AND p.is_interactive = 0
                   AND p.rating IS NOT NULL
                   AND p.rating BETWEEN ? AND ?
-                ORDER BY RANDOM()
+                ORDER BY RAND()
                 LIMIT 1
                 """;
         List<CfProblem> rows = jdbcTemplate.query(sql, cfProblemRowMapper, minRating, maxRating);
@@ -226,7 +226,7 @@ public class DailyProblemRepository {
             sql.append(" AND LOWER(COALESCE(p.tags, '')) LIKE ? ");
             params.add("%" + tag.toLowerCase() + "%");
         }
-        sql.append(" ORDER BY RANDOM() LIMIT 1 ");
+        sql.append(" ORDER BY RAND() LIMIT 1 ");
         List<CfProblem> rows = jdbcTemplate.query(sql.toString(), cfProblemRowMapper, params.toArray());
         return rows.stream().findFirst();
     }

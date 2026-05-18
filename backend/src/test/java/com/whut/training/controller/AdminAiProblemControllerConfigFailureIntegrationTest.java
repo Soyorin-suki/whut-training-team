@@ -29,14 +29,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AdminAiProblemControllerConfigFailureIntegrationTest {
 
-    private static final Path TEST_DB = Paths.get(
-            System.getProperty("java.io.tmpdir"),
-            "whut-training-admin-ai-problem-config-test-" + System.nanoTime() + ".db"
-    ).toAbsolutePath();
+    private static final String TEST_DB_NAME = "whut-training-admin-ai-problem-config-test-" + System.nanoTime();
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + TEST_DB.toString().replace("\\", "/"));
+        registry.add("spring.datasource.url",
+                () -> "jdbc:h2:mem:" + TEST_DB_NAME + ";MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE");
         registry.add("app.llm.default-provider", () -> "");
     }
 

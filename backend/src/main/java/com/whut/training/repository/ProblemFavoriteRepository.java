@@ -2,6 +2,7 @@ package com.whut.training.repository;
 
 import com.whut.training.domain.dto.FavoriteProblemItem;
 import com.whut.training.domain.dto.ProblemFavoriteSummary;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -22,16 +23,19 @@ public class ProblemFavoriteRepository {
     }
 
     public boolean insertFavorite(Long userId, String problemKey) {
-        return jdbcTemplate.update(
-                """
-                        INSERT INTO problem_favorite (user_id, problem_key, created_at)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT(user_id, problem_key) DO NOTHING
-                        """,
-                userId,
-                problemKey,
-                OffsetDateTime.now().toString()
-        ) > 0;
+        try {
+            return jdbcTemplate.update(
+                    """
+                            INSERT INTO problem_favorite (user_id, problem_key, created_at)
+                            VALUES (?, ?, ?)
+                            """,
+                    userId,
+                    problemKey,
+                    OffsetDateTime.now().toString()
+            ) > 0;
+        } catch (DuplicateKeyException ex) {
+            return false;
+        }
     }
 
     public boolean deleteFavorite(Long userId, String problemKey) {

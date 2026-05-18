@@ -5,8 +5,12 @@ spring:
   application:
     name: training-backend
   datasource:
-    driver-class-name: org.sqlite.JDBC
-    url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/training.db}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/whut_training?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:training}
+    password: ${SPRING_DATASOURCE_PASSWORD:training123}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
@@ -21,6 +25,7 @@ app:
       enabled: true
   codeforces:
     hard-problem-threshold: 2000
+    user-stats-sync-enabled: ${APP_CODEFORCES_USER_STATS_SYNC_ENABLED:true}
     user-stats-sync-cron: "0 0 */6 * * *"
     user-stats-sync-zone: "Asia/Shanghai"
   auth:
