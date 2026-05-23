@@ -32,7 +32,7 @@
 - `POST /api/auth/refresh`
 - `GET /api/users`
 - `GET /api/users/{id}`
-- `PATCH /api/users/me`
+ - `PATCH /api/users/{user_id}`
 - `GET /api/daily-problem/today`
 - `POST /api/daily-problem/check-in`
 - `GET /api/daily-problem/history`
@@ -82,6 +82,10 @@
 - `Content-Type: application/json`
 - 仅当前登录用户可修改自己
 
+- `PATCH /api/users/{user_id}`
+- `Content-Type: application/json`
+- 权限：仅当前登录用户可修改自己的资料，管理员可以修改任意用户。
+
 请求体：
 ```json
 {
@@ -106,10 +110,12 @@
 ## 4. 每日一题与练习题接口
 
 ### 4.1 获取今日题（全员同题）
-- `GET /api/daily-problem/today`
 
 说明：
-- 如果当天题目不存在，后端会立即自动生成一题。
+
+- `GET /api/leaderboard?limit=50` - 获取排行榜，按 `total_points` 降序，默认返回前 50 名；响应包含 `userId`, `username`, `totalPoints`, `lastCheckinAt`。
+
+- `GET /api/home?top=10` - 首页聚合信息，返回 `totalUsers`、`topUsers`（前 N，默认 10）和 `todayProblem`（若后端已生成）；`topUsers` 结构同排行榜。
 
 ### 4.2 每日题打卡（计分）
 - `POST /api/daily-problem/check-in`
@@ -123,6 +129,11 @@
 规则：
 - 校验该提交是否属于当前用户且对应今日题。
 - 仅 `verdict=OK` 记分（当前为 `+1`）。
+- 同一用户同一天只能打卡一次。
+
+规则：
+- 校验该提交是否属于当前用户且对应今日题。
+- 仅 `verdict=OK` 记分；记分值为题目 `rating`（若题目无 rating，则记为 0）。
 - 同一用户同一天只能打卡一次。
 
 ### 4.3 每日题历史
@@ -150,6 +161,8 @@
 
 ### 4.6 管理员重生成今日题
 - `POST /api/admin/daily-problem/regenerate`
+
+- `POST /api/admin/daily-problem/redraw?slot=easy|hard&date=YYYY-MM-DD&confirm=false` - 管理员对指定 slot 重抽，旧题会被标记 `is_redrawn=true` 并插入新题（`date` 为空表示今日）。
 
 ## 5. 常见业务错误码
 - `400` 参数错误、提交不匹配题目、文件格式不支持等

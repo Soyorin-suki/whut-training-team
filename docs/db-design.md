@@ -16,6 +16,7 @@
 | is_online | INTEGER | NULL | 在线状态（0/1） |
 | last_online_time_seconds | INTEGER | NULL | 最近在线时间（Unix 秒） |
 | avatar_url | TEXT | NULL | 头像地址 |
+| total_points | INTEGER | NOT NULL DEFAULT 0 | 用户总积分（每日一题累计） |
 
 ## 2) `cf_problem`（Codeforces 题库缓存）
 | 字段名 | 类型 | 约束 | 说明 |
@@ -58,7 +59,7 @@
 | verdict | TEXT | NOT NULL | 判题结果 |
 | checked_at | TEXT | NOT NULL | 校验时间 |
 | score | INTEGER | NOT NULL DEFAULT 1 | 得分 |
-
+| score | INTEGER | NOT NULL DEFAULT 1 | 得分（默认由题目 rating 决定，历史兼容时默认为 1） |
 唯一约束：
 - `(user_id, date)`，保证每日仅打卡一次。
 

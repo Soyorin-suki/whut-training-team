@@ -11,31 +11,64 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 每日一题与练习题接口。
+ *
+ * <p>包括今日题获取、每日打卡、历史查询、自主抽题和练习题校验。所有接口都要求已登录。
+ */
 @RestController
 @RequestMapping("/api")
 public class DailyProblemController {
 
     private final DailyProblemService dailyProblemService;
 
+    /**
+     * 创建每日题控制器。
+     *
+     * @param dailyProblemService 每日题业务服务。
+     */
     public DailyProblemController(DailyProblemService dailyProblemService) {
         this.dailyProblemService = dailyProblemService;
     }
 
+    /**
+     * 获取今日题。
+     *
+     * @return 今日题与当前用户打卡状态。
+     */
     @GetMapping("/daily-problem/today")
     public ApiResponse<DailyProblemTodayResponse> getToday() {
         return ApiResponse.ok(dailyProblemService.getToday(requireCurrentUser()));
     }
 
+    /**
+     * 今日题打卡。
+     *
+     * @param request 打卡请求体，包含 submissionId。
+     * @return 打卡结果。
+     */
     @PostMapping("/daily-problem/check-in")
     public ApiResponse<CheckInResultResponse> checkIn(@Valid @RequestBody DailyProblemCheckInRequest request) {
         return ApiResponse.ok(dailyProblemService.checkIn(requireCurrentUser(), request.submissionId()));
     }
 
+    /**
+     * 查询每日题历史。
+     *
+     * @param days 查询天数，0 或不传表示全部记录。
+     * @return 历史列表。
+     */
     @GetMapping("/daily-problem/history")
-    public ApiResponse<List<DailyProblemHistoryItem>> history(@RequestParam(defaultValue = "14") int limit) {
-        return ApiResponse.ok(dailyProblemService.getHistory(requireCurrentUser(), limit));
+    public ApiResponse<List<DailyProblemHistoryItem>> history(@RequestParam(defaultValue = "0") int days) {
+        return ApiResponse.ok(dailyProblemService.getHistory(requireCurrentUser(), days));
     }
 
+    /**
+     * 自主抽题。
+     *
+     * @param request 可选抽题条件，主要是难度范围。
+     * @return 抽到的练习题。
+     */
     @PostMapping("/practice/draw")
     public ApiResponse<PracticeDrawResponse> draw(@RequestBody(required = false) PracticeDrawRequest request) {
         Integer minRating = request == null ? null : request.minRating();
@@ -43,6 +76,12 @@ public class DailyProblemController {
         return ApiResponse.ok(dailyProblemService.drawPracticeProblem(requireCurrentUser(), minRating, maxRating));
     }
 
+    /**
+     * 校验自主抽题提交。
+     *
+     * @param request 校验请求体，包含抽题记录 ID 和 submissionId。
+     * @return 校验结果，练习题不计分。
+     */
     @PostMapping("/practice/check")
     public ApiResponse<CheckInResultResponse> checkPractice(@Valid @RequestBody PracticeCheckRequest request) {
         return ApiResponse.ok(
@@ -50,6 +89,11 @@ public class DailyProblemController {
         );
     }
 
+    /**
+     * 读取当前登录用户，未登录则抛出 401。
+     *
+     * @return 当前用户。
+     */
     private User requireCurrentUser() {
         User user = UserContext.getCurrentUser();
         if (user == null) {

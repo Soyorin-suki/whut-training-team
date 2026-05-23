@@ -6,10 +6,16 @@ spring:
     name: training-backend
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:C:/Users/29768/Desktop/whut-training-team/backend/data/training.db
+    url: jdbc:sqlite:./data/training.db
 
 codeforces:
   base_url: https://codeforces.com/api
+
+push:
+  defaultAutoApprove: false
+
+superAdmin:
+  username: superadmin
 
 app:
   logging:
@@ -25,6 +31,9 @@ app:
     cron: "0 5 0 * * *"
     sync-cron: "0 0 0 * * MON"
     zone: "Asia/Shanghai"
+  daily:
+    ratingThreshold: 1700
+    historyRetentionDays: 0
 
 logging:
   level:

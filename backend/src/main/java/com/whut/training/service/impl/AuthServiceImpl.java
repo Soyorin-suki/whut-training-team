@@ -20,6 +20,11 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * 认证服务实现。
+ *
+ * <p>负责账号密码登录、token 续期、退出登录以及登录时同步 Codeforces 头像与 UID。当前实现仍以明文密码对比为主，属于已知安全风险，后续应改为哈希存储与校验。
+ */
 @Service
 @ServiceLog
 public class AuthServiceImpl implements AuthService {
@@ -32,6 +37,16 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final AuthTokenSessionRepository authTokenSessionRepository;
 
+    /**
+     * 创建认证服务实现。
+     *
+     * @param userService                用户服务。
+     * @param codeforcesApiService       Codeforces API 服务。
+     * @param userRepository             用户仓储。
+     * @param authTokenSessionRepository 认证会话仓储。
+     * @param accessTokenTtlSeconds      access token 有效期（秒）。
+     * @param refreshTokenTtlSeconds     refresh token 有效期（秒）。
+     */
     public AuthServiceImpl(
             UserService userService,
             CodeforcesApiService codeforcesApiService,
@@ -48,6 +63,12 @@ public class AuthServiceImpl implements AuthService {
         this.refreshTokenTtlSeconds = refreshTokenTtlSeconds;
     }
 
+    /**
+     * 校验用户名和密码并签发 token。
+     *
+     * @param request 登录请求。
+     * @return 登录响应。
+     */
     @Override
     public LoginResponse login(LoginRequest request) {
         User user;
@@ -79,6 +100,12 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
+    /**
+     * 使用 refresh token 换取新的 token 对。
+     *
+     * @param refreshToken 刷新令牌。
+     * @return 新的刷新响应。
+     */
     @Override
     public RefreshTokenResponse refresh(String refreshToken) {
         AuthTokenSession refreshSession = validateRefreshSession(refreshToken);
@@ -89,6 +116,12 @@ public class AuthServiceImpl implements AuthService {
         return new RefreshTokenResponse(nextPair.accessToken(), nextPair.refreshToken());
     }
 
+    /**
+     * 注销登录会话。
+     *
+     * @param accessToken  可选的 access token。
+     * @param refreshToken refresh token。
+     */
     @Override
     public void logout(String accessToken, String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
@@ -107,12 +140,24 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    /**
+     * 校验 access token 并读取用户。
+     *
+     * @param accessToken access token。
+     * @return 当前用户。
+     */
     @Override
     public User validateAccessTokenAndGetUser(String accessToken) {
         AuthTokenSession accessSession = validateAccessSession(accessToken);
         return userService.getById(accessSession.userId());
     }
 
+    /**
+     * 校验 access token 是否有效。
+     *
+     * @param accessToken access token。
+     * @return 对应会话。
+     */
     private AuthTokenSession validateAccessSession(String accessToken) {
         if (accessToken == null || accessToken.isBlank()) {
             throw new BusinessException(401, "invalid access token");
@@ -128,6 +173,12 @@ public class AuthServiceImpl implements AuthService {
         return accessSession;
     }
 
+    /**
+     * 校验 refresh token 是否有效。
+     *
+     * @param refreshToken refresh token。
+     * @return 对应会话。
+     */
     private AuthTokenSession validateRefreshSession(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BusinessException(401, "invalid refresh token");
@@ -146,6 +197,12 @@ public class AuthServiceImpl implements AuthService {
         return refreshSession;
     }
 
+    /**
+     * 签发新的 token 对并持久化会话。
+     *
+     * @param userId 用户 ID。
+     * @return token 对。
+     */
     private TokenPair issueTokenPair(Long userId) {
         authTokenSessionRepository.deleteExpiredBefore(Instant.now().getEpochSecond());
 
@@ -167,6 +224,11 @@ public class AuthServiceImpl implements AuthService {
         return new TokenPair(accessToken, refreshToken);
     }
 
+    /**
+     * 登录时同步用户头像与 UID。
+     *
+     * @param user 当前用户。
+     */
     private void syncAvatarFromCodeforcesOnLogin(User user) {
         if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
             return;
@@ -190,6 +252,12 @@ public class AuthServiceImpl implements AuthService {
         });
     }
 
+    /**
+     * 从头像 URL 中解析 UID。
+     *
+     * @param avatarUrl Codeforces 头像地址。
+     * @return UID；若无法解析则返回 null。
+     */
     private Long parseUidFromAvatarUrl(String avatarUrl) {
         if (avatarUrl == null || avatarUrl.isBlank()) {
             return null;
@@ -216,6 +284,12 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    /**
+     * 一对 token 的简单封装。
+     *
+     * @param accessToken  access token。
+     * @param refreshToken refresh token。
+     */
     private record TokenPair(String accessToken, String refreshToken) {
     }
 }
