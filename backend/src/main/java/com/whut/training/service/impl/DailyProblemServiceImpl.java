@@ -12,6 +12,8 @@ import com.whut.training.repository.DailyProblemRepository;
 import com.whut.training.service.CodeforcesApiService;
 import com.whut.training.service.DailyProblemService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -64,6 +66,21 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         this.defaultMaxRating = defaultMaxRating;
         this.noRepeatDays = noRepeatDays;
         this.ratingThreshold = ratingThreshold;
+    }
+
+    /**
+     * 应用启动后异步预同步 Codeforces 题库。
+     * 避免首次请求时同步耗时过长导致前端超时。
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void initialSyncOnStartup() {
+        new Thread(() -> {
+            try {
+                syncProblemPool();
+            } catch (Exception ignore) {
+                // best effort — scheduler will retry later
+            }
+        }, "cf-initial-sync").start();
     }
 
     /**

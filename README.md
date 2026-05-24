@@ -88,11 +88,9 @@ npm run dev
 
 前端默认地址：`http://localhost:5173`
 
-## 默认账号
+## 注意事项
 
-| 用户名 | 密码 | 角色 |
-| --- | --- | --- |
-| `admin` | `admin123` | ADMIN |
-| `superadmin` | `superadmin123` | SUPER_ADMIN |
-
-系统启动时会自动初始化以上账号（若不存在）。
+- **首次使用请先注册账号**（注册即获得 `USER` 角色）
+- **提升权限**：使用 SUPER_ADMIN 账号登录，在管理面板中修改目标用户的角色
+- **SUPER_ADMIN 账密**：在 `backend/src/main/resources/application.yml` 的 `superAdmin` 配置项中
+- 系统首次启动时会自动创建 SUPER_ADMIN 账号（若不存在），不创建普通 ADMIN

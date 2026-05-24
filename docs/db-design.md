@@ -158,9 +158,5 @@
 
 ## 默认账号
 
-| 用户名 | 密码 | 角色 |
-| --- | --- | --- |
-| admin | admin123 | ADMIN |
-| superadmin | superadmin123 | SUPER_ADMIN |
-
-系统启动时自动创建以上账号（若不存在）。
+系统启动时仅自动创建 SUPER_ADMIN 账号（账密见 `application.yml` 的 `superAdmin` 配置项）。
+普通 ADMIN 账号需用户自行注册后由超管提升权限。

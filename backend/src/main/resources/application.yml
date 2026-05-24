@@ -16,6 +16,7 @@ push:
 
 superAdmin:
   username: superadmin
+  password: superadmin123
 
 app:
   logging:

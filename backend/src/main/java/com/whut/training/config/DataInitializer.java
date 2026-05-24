@@ -4,49 +4,40 @@ import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
 /**
  * 默认数据初始化器。
  *
- * <p>启动时自动补齐管理员账号。当前实现会写入默认账号和明文密码，属于开发期便捷配置，生产环境应替换为安全初始化方案。
+ * <p>启动时仅创建 SUPER_ADMIN 账号（从配置文件读取账密）。
+ * 普通 ADMIN 账号需用户自行注册后由超管提升权限。
  */
 @Component
 @DependsOn("sqliteInitializer")
 public class DataInitializer {
 
     private final UserRepository userRepository;
+    private final String superAdminUsername;
+    private final String superAdminPassword;
 
-    /**
-     * 创建默认数据初始化器。
-     *
-     * @param userRepository 用户仓储。
-     */
-    public DataInitializer(UserRepository userRepository) {
+    public DataInitializer(UserRepository userRepository,
+                           @Value("${superAdmin.username:superadmin}") String superAdminUsername,
+                           @Value("${superAdmin.password:superadmin123}") String superAdminPassword) {
         this.userRepository = userRepository;
+        this.superAdminUsername = superAdminUsername;
+        this.superAdminPassword = superAdminPassword;
     }
 
-    /**
-     * 初始化默认管理员与超管理员。
-     */
     @PostConstruct
-    public void initAdmin() {
-        if (!userRepository.existsByUsername("admin")) {
+    public void initSuperAdmin() {
+        if (!userRepository.existsByUsername(superAdminUsername)) {
             userRepository.save(new User(
                     null,
-                    "admin",
-                    "admin@example.com",
-                    "admin123",
-                    UserRole.ADMIN
-            ));
-        }
-        if (!userRepository.existsByUsername("superadmin")) {
-            userRepository.save(new User(
-                    null,
-                    "superadmin",
-                    "superadmin@example.com",
-                    "superadmin123",
+                    superAdminUsername,
+                    superAdminUsername + "@whut.local",
+                    superAdminPassword,
                     UserRole.SUPER_ADMIN
             ));
         }
