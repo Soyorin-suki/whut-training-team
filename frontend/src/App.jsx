@@ -1,98 +1,78 @@
-import { useEffect, useState } from "react";
-import { clearStoredAuth, getStoredAuth, setStoredAuth } from "./auth";
-import HomeView from "./views/HomeView";
-import MainView from "./views/MainView";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import AppLayout from "./components/layout/AppLayout";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import HomePage from "./pages/HomePage";
+import DailyProblemPage from "./pages/DailyProblemPage";
+import LeaderboardPage from "./pages/LeaderboardPage";
+import PracticePage from "./pages/PracticePage";
+import PushPage from "./pages/PushPage";
+import ProfilePage from "./pages/ProfilePage";
+import AdminDailyPage from "./pages/admin/AdminDailyPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminPushPage from "./pages/admin/AdminPushPage";
+import NotFoundPage from "./pages/NotFoundPage";
 
-const ROUTES = {
-  home: "#/",
-  login: "#/login",
-  register: "#/register"
-};
-
-function getCurrentRoute() {
-  const hash = window.location.hash || ROUTES.home;
-  if (hash === ROUTES.login) {
-    return "login";
+function AuthGuard({ children }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-text-secondary">加载中...</p>
+      </div>
+    );
   }
-  if (hash === ROUTES.register) {
-    return "register";
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
   }
-  return "home";
+  return children;
 }
 
-function navigateTo(hash) {
-  window.location.hash = hash;
+function AdminGuard({ children }) {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-text-secondary">权限不足，需要管理员角色</p>
+      </div>
+    );
+  }
+  return children;
+}
+
+function GuestGuard({ children }) {
+  const { isAuthenticated } = useAuth();
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
 }
 
 export default function App() {
-  const [route, setRoute] = useState(getCurrentRoute);
-  const [auth, setAuth] = useState(getStoredAuth);
-
-  useEffect(() => {
-    function onHashChange() {
-      setRoute(getCurrentRoute());
-    }
-
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
-
-  function handleAuthSuccess(nextAuth) {
-    setStoredAuth(nextAuth);
-    setAuth(nextAuth);
-    navigateTo(ROUTES.home);
-  }
-
-  function handleLogout() {
-    clearStoredAuth();
-    setAuth(null);
-    navigateTo(ROUTES.login);
-  }
-
-  function handleUserUpdate(updatedUser) {
-    setAuth((prev) => {
-      if (!prev) {
-        return prev;
-      }
-      const nextAuth = {
-        ...prev,
-        user: {
-          ...prev.user,
-          ...updatedUser
-        }
-      };
-      setStoredAuth(nextAuth);
-      return nextAuth;
-    });
-  }
-
-  if (!auth && route === "home") {
-    navigateTo(ROUTES.login);
-    return (
-      <HomeView
-        initialPage="login"
-        onAuthSuccess={handleAuthSuccess}
-        onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
-      />
-    );
-  }
-
-  if (route === "login" || route === "register" || !auth) {
-    return (
-      <HomeView
-        initialPage={route === "register" ? "register" : "login"}
-        onAuthSuccess={handleAuthSuccess}
-        onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
-      />
-    );
-  }
-
   return (
-    <MainView
-      auth={auth}
-      onLogout={handleLogout}
-      onUserUpdate={handleUserUpdate}
-      onNavigate={(nextRoute) => navigateTo(ROUTES[nextRoute])}
-    />
+    <Routes>
+      {/* Public / guest routes */}
+      <Route path="/login" element={<GuestGuard><LoginPage /></GuestGuard>} />
+      <Route path="/register" element={<GuestGuard><RegisterPage /></GuestGuard>} />
+
+      {/* Authenticated routes */}
+      <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/daily" element={<DailyProblemPage />} />
+        <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/practice" element={<PracticePage />} />
+        <Route path="/push" element={<PushPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+
+        {/* Admin routes */}
+        <Route path="/admin/daily" element={<AdminGuard><AdminDailyPage /></AdminGuard>} />
+        <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
+        <Route path="/admin/push" element={<AdminGuard><AdminPushPage /></AdminGuard>} />
+      </Route>
+
+      {/* 404 */}
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
   );
 }

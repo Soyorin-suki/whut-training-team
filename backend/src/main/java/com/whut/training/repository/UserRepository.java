@@ -154,8 +154,13 @@ public class UserRepository {
             it.setUserId(rs.getLong("id"));
             it.setUsername(rs.getString("username"));
             it.setTotalPoints(rs.getInt("total_points"));
-            Timestamp ts = rs.getTimestamp("last_checkin_at");
-            if (ts != null) it.setLastCheckinAt(ts.toLocalDateTime());
+            // Read as String to avoid SQLite JDBC nanosecond parsing bug
+            String tsStr = rs.getString("last_checkin_at");
+            if (tsStr != null && !tsStr.isEmpty()) {
+                // Truncate nanoseconds to milliseconds for OffsetDateTime parsing
+                String cleaned = tsStr.replaceAll("(\\.\\d{3})\\d*", "$1");
+                it.setLastCheckinAt(java.time.OffsetDateTime.parse(cleaned).toLocalDateTime());
+            }
             return it;
         };
     }

@@ -13,7 +13,9 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -24,6 +26,8 @@ public class PushPoolRepository {
     private final RowMapper<PushPoolItem> poolItemRowMapper = (rs, rowNum) -> {
         Timestamp ca = rs.getTimestamp("created_at");
         Timestamp aa = rs.getTimestamp("approved_at");
+        Long approvedBy = rs.getLong("approved_by");
+        if (rs.wasNull()) approvedBy = null;
         return new PushPoolItem(
                 rs.getLong("id"),
                 rs.getString("title"),
@@ -33,7 +37,7 @@ public class PushPoolRepository {
                 rs.getString("status"),
                 rs.getInt("sort_order"),
                 ca != null ? ca.toLocalDateTime() : null,
-                (Long) rs.getObject("approved_by"),
+                approvedBy,
                 aa != null ? aa.toLocalDateTime() : null
         );
     };
@@ -83,6 +87,13 @@ public class PushPoolRepository {
         return jdbcTemplate.query(
                 "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool WHERE status = ? ORDER BY sort_order ASC",
                 poolItemRowMapper, status
+        );
+    }
+
+    public List<PushPoolItem> findAllBySubmitter(Long submitterId) {
+        return jdbcTemplate.query(
+                "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool WHERE submitter_id = ? ORDER BY created_at DESC",
+                poolItemRowMapper, submitterId
         );
     }
 
@@ -165,5 +176,51 @@ public class PushPoolRepository {
                 date.toString()
         );
         return rows.stream().findFirst();
+    }
+
+    public boolean existsInDailyPush(Long pushId) {
+        Integer c = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM daily_push WHERE push_id = ?",
+                Integer.class, pushId
+        );
+        return c != null && c > 0;
+    }
+
+    public boolean deleteById(Long id) {
+        int rows = jdbcTemplate.update("DELETE FROM push_pool WHERE id = ?", id);
+        return rows > 0;
+    }
+
+    public List<PushPoolItem> findApprovedUnpublished() {
+        return jdbcTemplate.query(
+                "SELECT pp.id, pp.title, pp.link, pp.description, pp.submitter_id, pp.status, pp.sort_order, pp.created_at, pp.approved_by, pp.approved_at FROM push_pool pp WHERE pp.status = 'APPROVED' AND pp.id NOT IN (SELECT push_id FROM daily_push) ORDER BY pp.sort_order ASC",
+                poolItemRowMapper
+        );
+    }
+
+    /**
+     * Query push history: daily_push JOIN push_pool, ordered by date DESC.
+     */
+    public List<Map<String, Object>> findPushedHistory() {
+        return jdbcTemplate.query(
+                "SELECT dp.date AS push_date, pp.id, pp.title, pp.link, pp.description, pp.submitter_id, pp.status, pp.sort_order, pp.created_at, pp.approved_by, pp.approved_at FROM daily_push dp JOIN push_pool pp ON dp.push_id = pp.id ORDER BY dp.date DESC",
+                (rs, rowNum) -> {
+                    Timestamp ca = rs.getTimestamp("created_at");
+                    Timestamp aa = rs.getTimestamp("approved_at");
+                    Map<String, Object> map = new java.util.LinkedHashMap<>();
+                    map.put("pushDate", rs.getString("push_date"));
+                    map.put("id", rs.getLong("id"));
+                    map.put("title", rs.getString("title"));
+                    map.put("link", rs.getString("link"));
+                    map.put("description", rs.getString("description"));
+                    map.put("submitterId", rs.getLong("submitter_id"));
+                    map.put("status", rs.getString("status"));
+                    map.put("sortOrder", rs.getInt("sort_order"));
+                    map.put("createdAt", ca != null ? ca.toLocalDateTime().toString() : null);
+                    map.put("approvedBy", (Long) rs.getObject("approved_by"));
+                    map.put("approvedAt", aa != null ? aa.toLocalDateTime().toString() : null);
+                    return map;
+                }
+        );
     }
 }

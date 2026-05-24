@@ -32,16 +32,29 @@
 - `POST /api/auth/refresh`
 - `GET /api/users`
 - `GET /api/users/{id}`
- - `PATCH /api/users/{user_id}`
+- `PATCH /api/users/{id}`
+- `GET /api/users/{user_id}/daily-heatmap`
 - `GET /api/daily-problem/today`
 - `POST /api/daily-problem/check-in`
 - `GET /api/daily-problem/history`
 - `POST /api/practice/draw`
 - `POST /api/practice/check`
+- `POST /api/push`
+- `GET /api/push`
+- `POST /api/push/{id}/submit`
+- `GET /api/push/{id}/submissions`
 
 管理员接口（需 ADMIN）：
 - `POST /api/admin/users`
 - `POST /api/admin/daily-problem/regenerate`
+- `POST /api/admin/daily-problem/redraw`
+- `POST /api/admin/push/{id}/approve`
+- `POST /api/admin/push/{id}/reject`
+- `POST /api/admin/push/{id}/promote`
+- `GET /api/roles`
+
+超管理员接口（需 SUPER_ADMIN）：
+- `PUT /api/admin/users/{id}/role`
 
 ## 3. 用户接口
 
@@ -60,12 +73,13 @@
 
 说明：
 - `username` 必须是有效 Codeforces handle（后端调用 `user.info` 校验）。
+- 可选字段：`codeforcesRating`, `maxRating`, `online`, `lastOnlineTimeSeconds`, `avatarUrl`。
 
 ### 3.2 登录
 - `POST /api/auth/login`
 
 返回字段包含：
-- 用户信息（`id/username/email/role/uid/codeforcesRating/maxRating/online/lastOnlineTimeSeconds/avatarUrl`）
+- 用户信息（`id/username/email/role/uid/codeforcesRating/maxRating/online/lastOnlineTimeSeconds/avatarUrl/displayName/bio/totalPoints`）
 - `accessToken`
 - `refreshToken`
 
@@ -77,45 +91,77 @@
 - `POST /api/auth/logout`
 - Header：`Authorization` + `X-Refresh-Token`
 
-### 3.5 修改个人信息
-- `PATCH /api/users/me`
-- `Content-Type: application/json`
-- 仅当前登录用户可修改自己
+### 3.5 获取用户信息
+- `GET /api/users/{id}`
+- 权限：仅本用户或管理员可查看。普通用户查看他人信息返回 403。
 
-- `PATCH /api/users/{user_id}`
+### 3.6 修改个人信息
+- `PATCH /api/users/{id}`
 - `Content-Type: application/json`
-- 权限：仅当前登录用户可修改自己的资料，管理员可以修改任意用户。
+- 权限：仅本用户或管理员可修改。
 
 请求体：
 ```json
 {
-  "email": "new_mail@example.com",
-  "password": "new_password_123"
+  "username": "new_handle",
+  "email": "new@example.com",
+  "password": "newpass123",
+  "displayName": "Alice",
+  "avatar": "https://...",
+  "bio": "Hello world"
 }
 ```
 
 说明：
-- `password` 可不传或传空字符串（表示不修改密码）。
-- 非空密码长度需 `>= 6`。
+- `password` 可不传或传空字符串（表示不修改密码）。非空密码长度需 `>= 6`。
+- `displayName` / `avatar` / `bio` 新增字段，可局部更新。
 
-### 3.6 上传头像
-- `Content-Type: multipart/form-data`
-- 表单字段：`file`
-
-说明：
-- 仅允许图片类型，支持：`png/jpg/jpeg/gif/webp`
-- 文件大小上限：`2MB`
-- 公开访问路径：`/uploads/avatars/{fileName}`
+### 3.7 用户每日提交热图
+- `GET /api/users/{user_id}/daily-heatmap?days=180`
+- 返回：`[{date, score, colorLevel}]`
+- `colorLevel` 为 0-4，由得分相对强度自动计算。
+- 权限：本用户或管理员。
 
 ## 4. 每日一题与练习题接口
 
-### 4.1 获取今日题（全员同题）
-
-说明：
-
-- `GET /api/leaderboard?limit=50` - 获取排行榜，按 `total_points` 降序，默认返回前 50 名；响应包含 `userId`, `username`, `totalPoints`, `lastCheckinAt`。
-
-- `GET /api/home?top=10` - 首页聚合信息，返回 `totalUsers`、`topUsers`（前 N，默认 10）和 `todayProblem`（若后端已生成）；`topUsers` 结构同排行榜。
+### 4.1 获取今日题（多题位 easy/hard）
+- `GET /api/daily-problem/today`
+- 返回示例：
+```json
+{
+  "code": 200,
+  "data": {
+    "problems": [
+      {
+        "type": "EASY",
+        "date": "2026-05-23",
+        "problemKey": "1234-A",
+        "contestId": 1234,
+        "problemIndex": "A",
+        "name": "Problem Name",
+        "rating": 1500,
+        "tags": "dp,greedy",
+        "sourceUrl": "https://codeforces.com/..."
+      },
+      {
+        "type": "HARD",
+        "date": "2026-05-23",
+        "problemKey": "5678-D",
+        "contestId": 5678,
+        "problemIndex": "D",
+        "name": "Hard Problem",
+        "rating": 1900,
+        "tags": "graph",
+        "sourceUrl": "https://codeforces.com/..."
+      }
+    ],
+    "checkedIn": false,
+    "score": 0
+  }
+}
+```
+- `checkedIn` 表示用户当日是否已打卡（任意 slot 通过即可）。
+- `score` 为当日当前最高得分（取 max rating）。
 
 ### 4.2 每日题打卡（计分）
 - `POST /api/daily-problem/check-in`
@@ -127,17 +173,33 @@
 ```
 
 规则：
-- 校验该提交是否属于当前用户且对应今日题。
-- 仅 `verdict=OK` 记分（当前为 `+1`）。
-- 同一用户同一天只能打卡一次。
-
-规则：
-- 校验该提交是否属于当前用户且对应今日题。
-- 仅 `verdict=OK` 记分；记分值为题目 `rating`（若题目无 rating，则记为 0）。
-- 同一用户同一天只能打卡一次。
+- 校验该提交是否属于当前用户且对应今日题（easy 或 hard slot）。
+- 仅 `verdict=OK` 记分；记分值为题目 `rating`。
+- 同一用户同一天可多次打卡，取 max rating 为当日得分。
+- 已被重抽（`is_redrawn=true`）的 slot 不计入。
+- 打卡积分通过 per-user 同步锁保证并发安全。
 
 ### 4.3 每日题历史
-- `GET /api/daily-problem/history?limit=14`
+- `GET /api/daily-problem/history?days=0`
+- `days=0` 或不传表示查询全部历史记录。
+- 返回示例：
+```json
+[
+  {
+    "date": "2026-05-23",
+    "slot": "easy",
+    "problemKey": "1234-A",
+    "name": "Problem Name",
+    "rating": 1500,
+    "sourceUrl": "https://...",
+    "isRedrawn": false,
+    "checkedIn": true,
+    "submissionId": 123456789,
+    "verdict": "OK",
+    "score": 1500
+  }
+]
+```
 
 ### 4.4 自主抽题（不计分）
 - `POST /api/practice/draw`
@@ -162,12 +224,123 @@
 ### 4.6 管理员重生成今日题
 - `POST /api/admin/daily-problem/regenerate`
 
-- `POST /api/admin/daily-problem/redraw?slot=easy|hard&date=YYYY-MM-DD&confirm=false` - 管理员对指定 slot 重抽，旧题会被标记 `is_redrawn=true` 并插入新题（`date` 为空表示今日）。
+### 4.7 管理员单题重抽
+- `POST /api/admin/daily-problem/redraw?slot=easy|hard&confirm=false`
+- `slot` 必填（easy/hard），`confirm` 保留扩展。
+- 旧题标记 `is_redrawn=true`，新题插入；已打卡的旧题记录保留且计分有效。
 
-## 5. 常见业务错误码
+## 5. 排行榜接口
+
+- `GET /api/leaderboard?limit=10&page=1&type=total`
+- 返回：
+```json
+{
+  "code": 200,
+  "data": {
+    "items": [
+      {
+        "userId": 1,
+        "username": "alice",
+        "totalPoints": 3500,
+        "lastCheckinAt": "2026-05-23T10:30:00"
+      }
+    ],
+    "total": 100,
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+- `limit` 默认 10，最大 100。
+- `page` 默认 1（1-based）。
+- 排序规则：`total_points DESC, last_checkin_at DESC`。
+
+## 6. 首页聚合接口
+
+- `GET /api/home?top=10`
+- 返回示例：
+```json
+{
+  "totalUsers": 120,
+  "topUsers": [ ... ],
+  "todayProblem": [ ... ],
+  "todayPushProblem": { ... },
+  "dailySubmissionSummary": {
+    "todaySubmissions": 45,
+    "todayCheckedInUsers": 30
+  }
+}
+```
+- `todayProblem` 为今日多题位（easy/hard）列表。
+- `todayPushProblem` 为当日推送题目（无推送时为 null）。
+- `dailySubmissionSummary` 包含当日总提交数和打卡用户数。
+
+## 7. 推题系统接口
+
+### 7.1 提交推题
+- `POST /api/push`
+- 请求体：
+```json
+{
+  "title": "Interesting Problem",
+  "link": "https://codeforces.com/...",
+  "description": "A nice dp problem"
+}
+```
+- `title` 和 `link` 必填，`description` 可选。
+
+### 7.2 查看推题池
+- `GET /api/push`
+- 普通用户仅看到已审批（APPROVED）的题目，管理员看到全部。
+
+### 7.3 提交推题解答
+- `POST /api/push/{id}/submit`
+- 请求体：
+```json
+{
+  "submissionLink": "https://codeforces.com/...",
+  "resultDescription": "Solved using dp"
+}
+```
+- `submissionLink` 必填。
+
+### 7.4 查看推题提交
+- `GET /api/push/{id}/submissions`
+- 管理员查看该题所有提交，普通用户仅看到自己的提交。
+
+### 7.5 管理员审批
+- `POST /api/admin/push/{id}/approve`
+
+### 7.6 管理员拒绝
+- `POST /api/admin/push/{id}/reject`
+
+### 7.7 管理员提升
+- `POST /api/admin/push/{id}/promote`
+- 将该题提升至推题队列最前。
+
+## 8. 角色管理接口
+
+### 8.1 查询角色列表
+- `GET /api/roles`
+- 权限：管理员及以上。
+- 返回基于枚举的角色列表：`[{name, code, description}]`。
+
+### 8.2 修改用户角色（超管理员）
+- `PUT /api/admin/users/{id}/role`
+- 权限：仅 SUPER_ADMIN。
+- 请求体：
+```json
+{
+  "role": "ADMIN"
+}
+```
+- 有效值：`USER`, `ADMIN`, `SUPER_ADMIN`。
+- 操作记录写入 `role_change_log` 表。
+
+## 9. 常见业务错误码
 - `400` 参数错误、提交不匹配题目、文件格式不支持等
 - `401` 未登录、token 无效或过期
-- `403` 非管理员调用管理员接口
+- `403` 权限不足（非管理员、非本人）
 - `404` 资源不存在
 - `409` 今日已打卡
 - `500` 服务端异常

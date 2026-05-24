@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -49,15 +50,25 @@ public class PushPoolServiceImpl implements PushPoolService {
 
     @Override
     public List<PushPoolItem> list(User user) {
-        if (user.getRole() == UserRole.ADMIN) {
+        if (user.getRole() == UserRole.ADMIN || user.getRole() == UserRole.SUPER_ADMIN) {
             return pushPoolRepository.findAll();
         }
-        return pushPoolRepository.findAllByStatus("APPROVED");
+        // Show all approved items plus user's own submitted (pending/rejected) items
+        List<PushPoolItem> approved = pushPoolRepository.findAllByStatus("APPROVED");
+        List<PushPoolItem> mine = pushPoolRepository.findAllBySubmitter(user.getId());
+        // Merge, avoiding duplicates (user's approved items already in approved list)
+        java.util.Set<Long> approvedIds = approved.stream().map(PushPoolItem::id).collect(java.util.stream.Collectors.toSet());
+        for (PushPoolItem item : mine) {
+            if (!approvedIds.contains(item.id())) {
+                approved.add(item);
+            }
+        }
+        return approved;
     }
 
     @Override
     public PushPoolItem approve(User adminUser, Long id) {
-        if (adminUser.getRole() != UserRole.ADMIN) {
+        if (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN) {
             throw new BusinessException(403, "admin role required");
         }
         PushPoolItem item = pushPoolRepository.findById(id)
@@ -68,7 +79,7 @@ public class PushPoolServiceImpl implements PushPoolService {
 
     @Override
     public PushPoolItem reject(User adminUser, Long id) {
-        if (adminUser.getRole() != UserRole.ADMIN) {
+        if (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN) {
             throw new BusinessException(403, "admin role required");
         }
         PushPoolItem item = pushPoolRepository.findById(id)
@@ -79,13 +90,42 @@ public class PushPoolServiceImpl implements PushPoolService {
 
     @Override
     public PushPoolItem promote(User adminUser, Long id) {
-        if (adminUser.getRole() != UserRole.ADMIN) {
+        if (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN) {
             throw new BusinessException(403, "admin role required");
         }
         PushPoolItem item = pushPoolRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(404, "push item not found"));
         pushPoolRepository.promoteToFront(id);
         return pushPoolRepository.findById(id).orElse(item);
+    }
+
+    @Override
+    public boolean deletePushItem(User adminUser, Long id) {
+        if (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN) {
+            throw new BusinessException(403, "admin role required");
+        }
+        PushPoolItem item = pushPoolRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(404, "push item not found"));
+        if (!"APPROVED".equals(item.status())) {
+            throw new BusinessException(400, "only approved items can be deleted");
+        }
+        if (pushPoolRepository.existsInDailyPush(id)) {
+            throw new BusinessException(400, "cannot delete already published item");
+        }
+        return pushPoolRepository.deleteById(id);
+    }
+
+    @Override
+    public List<Map<String, Object>> getPushHistory() {
+        return pushPoolRepository.findPushedHistory();
+    }
+
+    @Override
+    public List<PushPoolItem> getPool(User adminUser) {
+        if (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN) {
+            throw new BusinessException(403, "admin role required");
+        }
+        return pushPoolRepository.findApprovedUnpublished();
     }
 
     @Override

@@ -565,6 +565,16 @@ public class DailyProblemRepository {
         return c == null ? 0 : c;
     }
 
+    public int countActiveUsers(int days) {
+        LocalDate since = LocalDate.now().minusDays(days - 1L);
+        Integer c = jdbcTemplate.queryForObject(
+                "SELECT COUNT(DISTINCT user_id) FROM user_daily_status WHERE date >= ?",
+                Integer.class,
+                since.toString()
+        );
+        return c == null ? 0 : c;
+    }
+
     public List<DailyHeatmapItem> findHeatmapForUser(Long userId, int days) {
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(days - 1L);
@@ -598,5 +608,22 @@ public class DailyProblemRepository {
                 drawId,
                 userId
         );
+    }
+
+    public List<UserPracticeDraw> findPracticeDrawsByUserId(Long userId, int limit) {
+        return jdbcTemplate.query(
+                "SELECT id, user_id, draw_date, problem_key, contest_id, problem_index, name, rating, tags, source_url, drawn_at, submission_id, verdict, checked_at FROM user_practice_draw WHERE user_id = ? ORDER BY drawn_at DESC LIMIT ?",
+                userPracticeDrawRowMapper,
+                userId,
+                limit
+        );
+    }
+
+    public boolean deletePracticeDraw(Long drawId, Long userId) {
+        int rows = jdbcTemplate.update(
+                "DELETE FROM user_practice_draw WHERE id = ? AND user_id = ?",
+                drawId, userId
+        );
+        return rows > 0;
     }
 }

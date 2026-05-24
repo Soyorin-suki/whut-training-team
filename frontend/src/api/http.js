@@ -3,7 +3,7 @@ import { clearStoredAuth, getStoredAuth, setStoredAuth } from "../auth";
 
 const http = axios.create({
   baseURL: "http://localhost:8080",
-  timeout: 5000
+  timeout: 10000,
 });
 
 let refreshingPromise = null;
@@ -11,7 +11,7 @@ let refreshingPromise = null;
 function shouldSkipRefresh(config) {
   const url = config?.url || "";
   return url.includes("/api/auth/login")
-    || url.includes("/api/auth/register")
+    || url.includes("/api/users/register")
     || url.includes("/api/auth/refresh");
 }
 
@@ -33,15 +33,13 @@ async function refreshAccessToken() {
     throw new Error("refresh failed");
   }
 
-  const nextAuth = {
-    ...auth,
-    tokens: {
-      accessToken: payload.data.accessToken,
-      refreshToken: payload.data.refreshToken
-    }
+  const nextTokens = {
+    accessToken: payload.data.accessToken,
+    refreshToken: payload.data.refreshToken,
   };
+  const nextAuth = { ...auth, tokens: nextTokens };
   setStoredAuth(nextAuth);
-  return nextAuth.tokens;
+  return nextTokens;
 }
 
 http.interceptors.response.use(
@@ -69,6 +67,7 @@ http.interceptors.response.use(
       return http(config);
     } catch (refreshError) {
       clearStoredAuth();
+      window.dispatchEvent(new CustomEvent("auth:invalid"));
       return Promise.reject(refreshError);
     }
   }

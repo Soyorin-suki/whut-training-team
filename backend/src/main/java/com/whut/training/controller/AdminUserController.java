@@ -34,7 +34,7 @@ public class AdminUserController {
     @PostMapping
     public ApiResponse<User> createByAdmin(@Valid @RequestBody AdminCreateUserRequest request) {
         User currentUser = UserContext.getCurrentUser();
-        if (currentUser == null || currentUser.getRole() != UserRole.ADMIN) {
+        if (currentUser == null || (currentUser.getRole() != UserRole.ADMIN && currentUser.getRole() != UserRole.SUPER_ADMIN)) {
             throw new BusinessException(403, "admin role required");
         }
         return ApiResponse.ok(userService.createByAdmin(request));

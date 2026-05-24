@@ -75,4 +75,27 @@ public interface DailyProblemService {
      * @return 新插入的题目视图。
      */
     ProblemView adminRedrawSlot(User adminUser, java.time.LocalDate date, String slot, boolean confirm);
+
+    /**
+     * 确保当日题位（easy/hard）已生成。供首页等场景在读取 slot 之前调用。
+     */
+    void ensureTodaySlots();
+
+    /**
+     * 获取用户的自主练习历史。
+     *
+     * @param user  当前用户。
+     * @param limit 最大条数。
+     * @return 练习历史列表。
+     */
+    List<PracticeHistoryItem> getPracticeHistory(User user, int limit);
+
+    /**
+     * 删除一条自主练习记录。
+     *
+     * @param user   当前用户。
+     * @param drawId 抽题记录 ID。
+     * @return 是否删除成功。
+     */
+    boolean deletePracticeDraw(User user, Long drawId);
 }

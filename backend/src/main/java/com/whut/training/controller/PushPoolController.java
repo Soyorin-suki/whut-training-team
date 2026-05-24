@@ -67,6 +67,27 @@ public class PushPoolController {
         return ApiResponse.ok(pushPoolService.promote(user, id));
     }
 
+    @DeleteMapping("/admin/push/{id}")
+    public ApiResponse<Void> deletePushItem(@PathVariable Long id) {
+        User user = requireAdminUser();
+        boolean deleted = pushPoolService.deletePushItem(user, id);
+        if (!deleted) {
+            throw new BusinessException(404, "push item not found");
+        }
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/admin/push/pool")
+    public ApiResponse<List<PushPoolItem>> pool() {
+        User user = requireAdminUser();
+        return ApiResponse.ok(pushPoolService.getPool(user));
+    }
+
+    @GetMapping("/push/history")
+    public ApiResponse<List<Map<String, Object>>> pushHistory() {
+        return ApiResponse.ok(pushPoolService.getPushHistory());
+    }
+
     private User requireCurrentUser() {
         User user = UserContext.getCurrentUser();
         if (user == null) {
@@ -77,7 +98,7 @@ public class PushPoolController {
 
     private User requireAdminUser() {
         User user = requireCurrentUser();
-        if (user.getRole() != UserRole.ADMIN) {
+        if (user.getRole() != UserRole.ADMIN && user.getRole() != UserRole.SUPER_ADMIN) {
             throw new BusinessException(403, "admin role required");
         }
         return user;

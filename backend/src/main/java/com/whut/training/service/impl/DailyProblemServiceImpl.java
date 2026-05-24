@@ -288,6 +288,37 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         return new CheckInResultResponse("PRACTICE", accepted, submissionId, submissionStatus.verdict(), 0);
     }
 
+    @Override
+    public List<PracticeHistoryItem> getPracticeHistory(User user, int limit) {
+        List<UserPracticeDraw> draws = dailyProblemRepository.findPracticeDrawsByUserId(user.getId(), Math.max(1, Math.min(limit, 100)));
+        return draws.stream()
+                .map(d -> new PracticeHistoryItem(
+                        d.id(),
+                        d.drawDate().toString(),
+                        d.problemKey(),
+                        d.contestId(),
+                        d.problemIndex(),
+                        d.name(),
+                        d.rating(),
+                        d.tags(),
+                        d.sourceUrl(),
+                        null, // drawnAt not stored in current entity
+                        d.submissionId(),
+                        d.verdict()
+                ))
+                .toList();
+    }
+
+    @Override
+    public void ensureTodaySlots() {
+        ensureDailySlots(LocalDate.now(), false, "api-home");
+    }
+
+    @Override
+    public boolean deletePracticeDraw(User user, Long drawId) {
+        return dailyProblemRepository.deletePracticeDraw(drawId, user.getId());
+    }
+
     /**
      * 管理员重生成今日题。
      *
@@ -296,7 +327,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public ProblemView regenerateTodayByAdmin(User adminUser) {
-        if (adminUser == null || adminUser.getRole() != UserRole.ADMIN) {
+        if (adminUser == null || (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN)) {
             throw new BusinessException(403, "admin role required");
         }
         DailyProblem dailyProblem = ensureDailyProblem(LocalDate.now(), true, "admin");
@@ -305,7 +336,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
     @Override
     public ProblemView adminRedrawSlot(User adminUser, java.time.LocalDate date, String slot, boolean confirm) {
-        if (adminUser == null || adminUser.getRole() != UserRole.ADMIN) {
+        if (adminUser == null || (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN)) {
             throw new BusinessException(403, "admin role required");
         }
         LocalDate target = date == null ? LocalDate.now() : date;
