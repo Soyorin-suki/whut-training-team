@@ -21,6 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Codeforces 外部 API 客户端。
+ *
+ * <p>负责读取用户资料、题库和提交状态。当前实现会把大多数外部错误折叠为 empty / empty list，便于业务继续运行，但也意味着瞬时故障可能不会直接暴露，属于已知可观测性缺口。
+ */
 @Service
 @ServiceLog
 public class CodeforcesApiService {
@@ -31,10 +36,21 @@ public class CodeforcesApiService {
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * 创建 Codeforces API 服务。
+     *
+     * @param baseUrl Codeforces API 基础地址。
+     */
     public CodeforcesApiService(@Value("${codeforces.base_url:https://codeforces.com/api}") String baseUrl) {
         this.baseUrl = baseUrl;
     }
 
+    /**
+     * 获取用户资料。
+     *
+     * @param handle Codeforces handle。
+     * @return 用户资料。
+     */
     public Optional<CodeforcesUserProfile> getUserInfo(String handle) {
         if (handle == null || handle.isBlank()) {
             return Optional.empty();
@@ -80,6 +96,11 @@ public class CodeforcesApiService {
         }
     }
 
+    /**
+     * 拉取 Codeforces 题库。
+     *
+     * @return 题目列表；失败时返回空列表。
+     */
     public List<CfProblem> fetchProblemSet() {
         String url = baseUrl + "/problemset.problems";
         HttpRequest request = HttpRequest.newBuilder()
@@ -157,6 +178,13 @@ public class CodeforcesApiService {
         }
     }
 
+    /**
+     * 获取提交状态。
+     *
+     * @param handle       Codeforces handle。
+     * @param submissionId 提交 ID。
+     * @return 提交状态。
+     */
     public Optional<SubmissionStatus> getSubmissionStatus(String handle, Long submissionId) {
         if (handle == null || handle.isBlank() || submissionId == null) {
             return Optional.empty();
@@ -214,21 +242,49 @@ public class CodeforcesApiService {
         }
     }
 
+    /**
+     * 读取整数字段。
+     *
+     * @param node  JSON 节点。
+     * @param field 字段名。
+     * @return 整数或 null。
+     */
     private Integer nullableInt(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value == null || value.isNull() ? null : value.asInt();
     }
 
+    /**
+     * 读取长整型字段。
+     *
+     * @param node  JSON 节点。
+     * @param field 字段名。
+     * @return 长整型或 null。
+     */
     private Long nullableLong(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value == null || value.isNull() ? null : value.asLong();
     }
 
+    /**
+     * 读取布尔字段。
+     *
+     * @param node  JSON 节点。
+     * @param field 字段名。
+     * @return 布尔值或 null。
+     */
     private Boolean nullableBoolean(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value == null || value.isNull() ? null : value.asBoolean();
     }
 
+    /**
+     * 读取文本字段。
+     *
+     * @param node  JSON 节点。
+     * @param field 字段名。
+     * @return 文本或 null。
+     */
     private String nullableText(JsonNode node, String field) {
         JsonNode value = node.get(field);
         if (value == null || value.isNull()) {
@@ -238,6 +294,12 @@ public class CodeforcesApiService {
         return text == null || text.isBlank() ? null : text;
     }
 
+    /**
+     * 将标签数组转成逗号分隔文本。
+     *
+     * @param tagsNode 标签数组节点。
+     * @return 标签字符串。
+     */
     private String readTags(JsonNode tagsNode) {
         if (!tagsNode.isArray()) {
             return "";
@@ -252,14 +314,39 @@ public class CodeforcesApiService {
         return String.join(",", tags);
     }
 
+    /**
+     * 生成题目唯一键。
+     *
+     * @param contestId    比赛 ID。
+     * @param problemIndex 题号。
+     * @return 题目键。
+     */
     private String buildProblemKey(Integer contestId, String problemIndex) {
         return contestId + "-" + problemIndex;
     }
 
+    /**
+     * Codeforces 用户资料摘要。
+     *
+     * @param rating               当前 rating。
+     * @param maxRating            历史最高 rating。
+     * @param online               在线状态。
+     * @param lastOnlineTimeSeconds 最近在线时间戳。
+     * @param avatarUrl            头像地址。
+     */
     public record CodeforcesUserProfile(Integer rating, Integer maxRating, Boolean online,
                                         Long lastOnlineTimeSeconds, String avatarUrl) {
     }
 
+    /**
+     * Codeforces 提交状态摘要。
+     *
+     * @param submissionId 提交 ID。
+     * @param contestId    比赛 ID。
+     * @param problemIndex 题号。
+     * @param verdict      判题结果。
+     * @param creationTime 提交时间。
+     */
     public record SubmissionStatus(Long submissionId, Integer contestId, String problemIndex, String verdict,
                                    Instant creationTime) {
     }

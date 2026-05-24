@@ -21,6 +21,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 服务层调用日志切面。
+ *
+ * <p>该切面仅作用于 {@code com.whut.training.service..*} 包下且被 {@link ServiceLog} 标记的类或方法，
+ * 记录请求来源、参数摘要、执行耗时以及异常类型。敏感字段如 password、token、secret 会被脱敏。
+ */
 @Aspect
 @Component
 @ConditionalOnProperty(prefix = "app.logging.service", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -30,18 +36,34 @@ public class ServiceLogAspect {
     private static final int MAX_LOG_STRING_LENGTH = 120;
     private static final int MAX_FIELDS = 10;
 
+    /**
+     * 定义服务包内的切点。
+     */
     @Pointcut("within(com.whut.training.service..*)")
     public void inServicePackage() {
     }
 
+    /**
+     * 定义类级别的日志标记切点。
+     */
     @Pointcut("@within(com.whut.training.aspect.annotation.ServiceLog)")
     public void serviceLogClass() {
     }
 
+    /**
+     * 定义方法级别的日志标记切点。
+     */
     @Pointcut("@annotation(com.whut.training.aspect.annotation.ServiceLog)")
     public void serviceLogMethod() {
     }
 
+    /**
+     * 环绕记录一次服务调用。
+     *
+     * @param joinPoint 当前切点。
+     * @return 目标方法执行结果。
+     * @throws Throwable 目标方法抛出的异常会原样抛出。
+     */
     @Around("inServicePackage() && (serviceLogClass() || serviceLogMethod())")
     public Object logServiceInvocation(ProceedingJoinPoint joinPoint) throws Throwable {
         long startNs = System.nanoTime();
@@ -67,6 +89,11 @@ public class ServiceLogAspect {
         }
     }
 
+    /**
+     * 构造当前请求的简要说明。
+     *
+     * @return 请求方法、路径和客户端 IP；不在 HTTP 请求上下文时返回 N/A。
+     */
     private String buildRequestInfo() {
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
         if (!(requestAttributes instanceof ServletRequestAttributes servletRequestAttributes)) {
@@ -80,6 +107,12 @@ public class ServiceLogAspect {
         return request.getMethod() + " " + path + " ip=" + request.getRemoteAddr();
     }
 
+    /**
+     * 构造参数摘要。
+     *
+     * @param args 方法参数。
+     * @return 参数摘要字符串。
+     */
     private String buildArgsInfo(Object[] args) {
         if (args == null || args.length == 0) {
             return "[]";
@@ -91,6 +124,13 @@ public class ServiceLogAspect {
         return "[" + String.join(", ", items) + "]";
     }
 
+    /**
+     * 对任意值生成日志摘要。
+     *
+     * @param key   参数名或字段名。
+     * @param value 参数值。
+     * @return 摘要字符串。
+     */
     private String summarizeValue(String key, Object value) {
         if (value == null) {
             return "null";
@@ -116,6 +156,12 @@ public class ServiceLogAspect {
         return value.getClass().getSimpleName();
     }
 
+    /**
+     * 摘要输出对象字段。
+     *
+     * @param value 目标对象。
+     * @return 只包含少量字段的对象摘要。
+     */
     private String summarizeObjectFields(Object value) {
         Field[] fields = value.getClass().getDeclaredFields();
         if (fields.length == 0) {
@@ -143,6 +189,13 @@ public class ServiceLogAspect {
         return value.getClass().getSimpleName() + "{" + String.join(", ", items) + "}";
     }
 
+    /**
+     * 摘要单个字段值。
+     *
+     * @param fieldName 字段名。
+     * @param value     字段值。
+     * @return 适合写入日志的字段摘要。
+     */
     private String summarizeFieldValue(String fieldName, Object value) {
         if (isSensitiveKey(fieldName)) {
             return "***";
@@ -163,6 +216,12 @@ public class ServiceLogAspect {
         return value.getClass().getSimpleName();
     }
 
+    /**
+     * 判断字段名是否应脱敏。
+     *
+     * @param key 字段名。
+     * @return 如果包含敏感关键字则返回 true。
+     */
     private boolean isSensitiveKey(String key) {
         String lower = key.toLowerCase();
         return lower.contains("password")

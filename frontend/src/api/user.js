@@ -1,57 +1,32 @@
 import http from "./http";
-
-function authHeaders(tokens) {
-  if (!tokens?.accessToken || !tokens?.refreshToken) {
-    return {};
-  }
-  return {
-    Authorization: `Bearer ${tokens.accessToken}`,
-    "X-Refresh-Token": tokens.refreshToken
-  };
-}
-
-export async function listUsers(tokens) {
-  const res = await http.get("/api/users", {
-    headers: authHeaders(tokens)
-  });
-  return res.data;
-}
+import { authHeaders } from "./auth";
 
 export async function registerUser(payload) {
   const res = await http.post("/api/users/register", payload);
   return res.data;
 }
 
-export async function login(payload) {
-  const res = await http.post("/api/auth/login", payload);
+export async function listUsers() {
+  const res = await http.get("/api/users", { headers: authHeaders() });
   return res.data;
 }
 
-export async function logout(tokens) {
-  const res = await http.post(
-    "/api/auth/logout",
-    {},
-    {
-      headers: authHeaders(tokens)
-    }
-  );
+export async function getUserById(id) {
+  const res = await http.get(`/api/users/${id}`, { headers: authHeaders() });
   return res.data;
 }
 
-export async function adminCreateUser(payload, tokens) {
-  const res = await http.post(
-    "/api/admin/users",
-    payload,
-    {
-      headers: authHeaders(tokens)
-    }
-  );
+export async function updateMyProfile(id, payload) {
+  const res = await http.patch(`/api/users/${id}`, payload ?? {}, {
+    headers: authHeaders(),
+  });
   return res.data;
 }
 
-export async function updateMyProfile(payload, tokens) {
-  const res = await http.patch("/api/users/me", payload ?? {}, {
-    headers: authHeaders(tokens)
+export async function getHeatmap(userId, days = 180) {
+  const res = await http.get(`/api/users/${userId}/daily-heatmap`, {
+    headers: authHeaders(),
+    params: { days },
   });
   return res.data;
 }

@@ -32,3 +32,11 @@ pnpm-debug.log*
 # Frontend env files
 frontend/.env.local
 frontend/.env.*.local
+
+# claude
+CLAUDE.md
+.claude
+
+# agent
+AGENTS.md
+task.md
