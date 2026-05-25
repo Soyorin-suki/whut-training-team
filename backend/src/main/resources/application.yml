@@ -6,7 +6,7 @@ spring:
     name: training-backend
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:./data/training.db
+    url: jdbc:sqlite:./data/training.db?busy_timeout=5000
 
 codeforces:
   base_url: https://codeforces.com/api
@@ -19,6 +19,8 @@ superAdmin:
   password: superadmin123
 
 app:
+  database:
+    type: sqlite
   logging:
     service:
       enabled: true

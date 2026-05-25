@@ -1,27 +1,38 @@
 import { useEffect, useState } from "react";
-import { listPush, approvePushItem, rejectPushItem, promotePushItem, deletePushItem, getPushPool } from "../../api/push";
+import { listPush, approvePushItem, rejectPushItem, promotePushItem, deletePushItem, getPushPool, getPushHistory } from "../../api/push";
 import EmptyState from "../../components/ui/EmptyState";
 import { ListSkeleton } from "../../components/ui/Skeleton";
 
 export default function AdminPushPage() {
   const [items, setItems] = useState([]);
   const [poolItems, setPoolItems] = useState([]);
+  const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [deletingId, setDeletingId] = useState(null);
 
   async function load() {
     try {
-      const [listResp, poolResp] = await Promise.all([
+      const [listResp, poolResp, historyResp] = await Promise.all([
         listPush(),
         getPushPool(),
+        getPushHistory(),
       ]);
       if (listResp.code === 200) setItems(listResp.data || []);
       if (poolResp.code === 200) setPoolItems(poolResp.data || []);
+      if (historyResp.code === 200) setHistoryItems(historyResp.data || []);
     } catch {
       // ignore
     } finally {
       setLoading(false);
+    }
+  }
+
+  // 构建 pushId → pushDate 映射，供已推送区块展示推送日期
+  const pushDateMap = {};
+  for (const h of historyItems) {
+    if (h.id != null && h.pushDate) {
+      pushDateMap[h.id] = h.pushDate;
     }
   }
 
@@ -72,6 +83,7 @@ export default function AdminPushPage() {
   const pending = items.filter((i) => i.status === "PENDING");
   const approved = items.filter((i) => i.status === "APPROVED");
   const rejected = items.filter((i) => i.status === "REJECTED");
+  const published = items.filter((i) => i.status === "PUBLISHED");
 
   return (
     <div className="space-y-5">
@@ -98,8 +110,11 @@ export default function AdminPushPage() {
                   <div key={item.id} className="bg-white border border-border rounded-ui p-3 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary m-0">{item.title}</p>
+                      {item.submitterUsername && (
+                        <span className="text-xs text-text-secondary">推题人：{item.submitterUsername}</span>
+                      )}
                       {item.link && (
-                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline">
+                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline ml-2">
                           {item.link}
                         </a>
                       )}
@@ -130,6 +145,9 @@ export default function AdminPushPage() {
                   <div key={item.id} className="bg-white border border-border rounded-ui p-3 flex items-center justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary m-0">{item.title}</p>
+                      {item.submitterUsername && (
+                        <span className="text-xs text-text-secondary">推题人：{item.submitterUsername}</span>
+                      )}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button className="px-2.5 py-1 text-xs border border-border rounded bg-white text-text-secondary hover:bg-bg-secondary cursor-pointer"
@@ -140,6 +158,38 @@ export default function AdminPushPage() {
                         {deletingId === item.id ? "..." : "删除"}
                       </button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Published */}
+          <section>
+            <h2 className="text-base font-semibold text-text-primary m-0 mb-2">
+              已推送 ({published.length})
+            </h2>
+            {published.length === 0 ? (
+              <EmptyState title="暂无已推送推题" description="系统每日凌晨自动推送，或用户访问时触发懒发布" />
+            ) : (
+              <div className="space-y-2">
+                {published.map((item) => (
+                  <div key={item.id} className="bg-white border border-border rounded-ui p-3 flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary m-0">{item.title}</p>
+                      {item.submitterUsername && (
+                        <span className="text-xs text-text-secondary">推题人：{item.submitterUsername}</span>
+                      )}
+                      {pushDateMap[item.id] && (
+                        <span className="text-xs text-text-secondary ml-2">推送日期：{pushDateMap[item.id]}</span>
+                      )}
+                      {item.link && (
+                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline ml-2">
+                          {item.link}
+                        </a>
+                      )}
+                    </div>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-[#f0f0ff] text-[#5865f2] flex-shrink-0">已推送</span>
                   </div>
                 ))}
               </div>
@@ -159,6 +209,9 @@ export default function AdminPushPage() {
                   <div key={item.id} className="bg-white border border-border rounded-ui p-3 flex items-center justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary m-0">{item.title}</p>
+                      {item.submitterUsername && (
+                        <span className="text-xs text-text-secondary">推题人：{item.submitterUsername}</span>
+                      )}
                     </div>
                     <button className="px-2.5 py-1 text-xs border border-border rounded bg-white text-text-secondary hover:bg-bg-secondary cursor-pointer"
                       onClick={() => handlePromote(item.id)}>提升</button>

@@ -1,5 +1,6 @@
 package com.whut.training.repository;
 
+import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.DailyHeatmapItem;
 import com.whut.training.domain.dto.DailyProblemHistoryItem;
 import com.whut.training.domain.entity.CfProblem;
@@ -27,6 +28,7 @@ import java.util.Optional;
 public class DailyProblemRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final TimeProvider timeProvider;
 
     private final RowMapper<CfProblem> cfProblemRowMapper = (rs, rowNum) -> new CfProblem(
             rs.getString("problem_key"),
@@ -95,8 +97,9 @@ public class DailyProblemRepository {
      *
      * @param jdbcTemplate JDBC 模板。
      */
-    public DailyProblemRepository(JdbcTemplate jdbcTemplate) {
+    public DailyProblemRepository(JdbcTemplate jdbcTemplate, TimeProvider timeProvider) {
         this.jdbcTemplate = jdbcTemplate;
+        this.timeProvider = timeProvider;
     }
 
     /**
@@ -566,7 +569,7 @@ public class DailyProblemRepository {
     }
 
     public int countActiveUsers(int days) {
-        LocalDate since = LocalDate.now().minusDays(days - 1L);
+        LocalDate since = timeProvider.today().minusDays(days - 1L);
         Integer c = jdbcTemplate.queryForObject(
                 "SELECT COUNT(DISTINCT user_id) FROM user_daily_status WHERE date >= ?",
                 Integer.class,
@@ -576,7 +579,7 @@ public class DailyProblemRepository {
     }
 
     public List<DailyHeatmapItem> findHeatmapForUser(Long userId, int days) {
-        LocalDate endDate = LocalDate.now();
+        LocalDate endDate = timeProvider.today();
         LocalDate startDate = endDate.minusDays(days - 1L);
         List<DailyHeatmapItem> items = jdbcTemplate.query(
                 "SELECT date, score FROM user_daily_status WHERE user_id = ? AND date BETWEEN ? AND ? ORDER BY date ASC",

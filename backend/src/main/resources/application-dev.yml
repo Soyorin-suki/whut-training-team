@@ -1,0 +1,9 @@
+# 开发环境配置
+# 激活方式: mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
+# 或在 application.yml 中设置 spring.profiles.active=dev
+
+
+app:
+  logging:
+    service:
+      enabled: true

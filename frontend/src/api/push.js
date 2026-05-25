@@ -6,8 +6,21 @@ export async function submitPush(title, link, description) {
   return res.data;
 }
 
+/** 获取已推送的题目列表（普通用户）或全部推题（管理员） */
 export async function listPush() {
   const res = await http.get("/api/push", { headers: authHeaders() });
+  return res.data;
+}
+
+/** 获取今日推题 */
+export async function getTodayPush() {
+  const res = await http.get("/api/push/today", { headers: authHeaders() });
+  return res.data;
+}
+
+/** 获取我的推题（当前用户提交的全部推题） */
+export async function getMyPushes() {
+  const res = await http.get("/api/push/mine", { headers: authHeaders() });
   return res.data;
 }
 

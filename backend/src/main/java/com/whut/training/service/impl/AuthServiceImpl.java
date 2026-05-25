@@ -1,6 +1,7 @@
 package com.whut.training.service.impl;
 
 import com.whut.training.aspect.annotation.ServiceLog;
+import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.LoginRequest;
 import com.whut.training.domain.dto.LoginResponse;
 import com.whut.training.domain.dto.RefreshTokenResponse;
@@ -36,22 +37,14 @@ public class AuthServiceImpl implements AuthService {
     private final CodeforcesApiService codeforcesApiService;
     private final UserRepository userRepository;
     private final AuthTokenSessionRepository authTokenSessionRepository;
+    private final TimeProvider timeProvider;
 
-    /**
-     * 创建认证服务实现。
-     *
-     * @param userService                用户服务。
-     * @param codeforcesApiService       Codeforces API 服务。
-     * @param userRepository             用户仓储。
-     * @param authTokenSessionRepository 认证会话仓储。
-     * @param accessTokenTtlSeconds      access token 有效期（秒）。
-     * @param refreshTokenTtlSeconds     refresh token 有效期（秒）。
-     */
     public AuthServiceImpl(
             UserService userService,
             CodeforcesApiService codeforcesApiService,
             UserRepository userRepository,
             AuthTokenSessionRepository authTokenSessionRepository,
+            TimeProvider timeProvider,
             @Value("${app.auth.access-token-ttl-seconds:1800}") long accessTokenTtlSeconds,
             @Value("${app.auth.refresh-token-ttl-seconds:604800}") long refreshTokenTtlSeconds
     ) {
@@ -59,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
         this.codeforcesApiService = codeforcesApiService;
         this.userRepository = userRepository;
         this.authTokenSessionRepository = authTokenSessionRepository;
+        this.timeProvider = timeProvider;
         this.accessTokenTtlSeconds = accessTokenTtlSeconds;
         this.refreshTokenTtlSeconds = refreshTokenTtlSeconds;
     }
@@ -164,8 +158,7 @@ public class AuthServiceImpl implements AuthService {
         }
         AuthTokenSession accessSession = authTokenSessionRepository.findByAccessToken(accessToken)
                 .orElseThrow(() -> new BusinessException(401, "invalid access token"));
-        Instant now = Instant.now();
-        long nowSeconds = now.getEpochSecond();
+        long nowSeconds = timeProvider.nowEpochSecond();
         if (nowSeconds >= accessSession.accessExpiredAtSeconds()) {
             authTokenSessionRepository.deleteByAccessToken(accessToken);
             throw new BusinessException(401, "access token expired");
@@ -187,8 +180,7 @@ public class AuthServiceImpl implements AuthService {
         AuthTokenSession refreshSession = authTokenSessionRepository.findByRefreshToken(refreshToken)
                 .orElseThrow(() -> new BusinessException(401, "invalid refresh token"));
 
-        Instant now = Instant.now();
-        long nowSeconds = now.getEpochSecond();
+        long nowSeconds = timeProvider.nowEpochSecond();
         if (nowSeconds >= refreshSession.refreshExpiredAtSeconds()) {
             authTokenSessionRepository.deleteByRefreshToken(refreshToken);
             authTokenSessionRepository.deleteByAccessToken(refreshSession.accessToken());
@@ -204,19 +196,18 @@ public class AuthServiceImpl implements AuthService {
      * @return token 对。
      */
     private TokenPair issueTokenPair(Long userId) {
-        authTokenSessionRepository.deleteExpiredBefore(Instant.now().getEpochSecond());
-
         String accessToken = UUID.randomUUID().toString();
         String refreshToken = UUID.randomUUID().toString();
-        Instant now = Instant.now();
+        long nowSeconds = timeProvider.nowEpochSecond();
         AuthTokenSession session = new AuthTokenSession(
                 userId,
                 accessToken,
                 refreshToken,
-                now.plusSeconds(accessTokenTtlSeconds).getEpochSecond(),
-                now.plusSeconds(refreshTokenTtlSeconds).getEpochSecond()
+                nowSeconds + accessTokenTtlSeconds,
+                nowSeconds + refreshTokenTtlSeconds
         );
         try {
+            authTokenSessionRepository.deleteExpiredBefore(timeProvider.nowEpochSecond());
             authTokenSessionRepository.save(session);
         } catch (DataAccessException ex) {
             throw new BusinessException(500, "failed to issue token");
@@ -247,7 +238,11 @@ public class AuthServiceImpl implements AuthService {
                 changed = true;
             }
             if (changed) {
-                userRepository.save(user);
+                try {
+                    userRepository.save(user);
+                } catch (DataAccessException ex) {
+                    // 头像同步失败不影响登录流程
+                }
             }
         });
     }
