@@ -1,6 +1,7 @@
 package com.whut.training.service.impl;
 
 import com.whut.training.aspect.annotation.ServiceLog;
+import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.entity.PushPoolItem;
 import com.whut.training.domain.entity.PushSubmission;
 import com.whut.training.domain.entity.User;
@@ -22,12 +23,15 @@ import java.util.Optional;
 public class PushPoolServiceImpl implements PushPoolService {
 
     private final PushPoolRepository pushPoolRepository;
+    private final TimeProvider timeProvider;
     private final boolean defaultAutoApprove;
 
     public PushPoolServiceImpl(
             PushPoolRepository pushPoolRepository,
+            TimeProvider timeProvider,
             @Value("${app.push.defaultAutoApprove:false}") boolean defaultAutoApprove) {
         this.pushPoolRepository = pushPoolRepository;
+        this.timeProvider = timeProvider;
         this.defaultAutoApprove = defaultAutoApprove;
     }
 
@@ -53,17 +57,13 @@ public class PushPoolServiceImpl implements PushPoolService {
         if (user.getRole() == UserRole.ADMIN || user.getRole() == UserRole.SUPER_ADMIN) {
             return pushPoolRepository.findAll();
         }
-        // Show all approved items plus user's own submitted (pending/rejected) items
-        List<PushPoolItem> approved = pushPoolRepository.findAllByStatus("APPROVED");
-        List<PushPoolItem> mine = pushPoolRepository.findAllBySubmitter(user.getId());
-        // Merge, avoiding duplicates (user's approved items already in approved list)
-        java.util.Set<Long> approvedIds = approved.stream().map(PushPoolItem::id).collect(java.util.stream.Collectors.toSet());
-        for (PushPoolItem item : mine) {
-            if (!approvedIds.contains(item.id())) {
-                approved.add(item);
-            }
-        }
-        return approved;
+        // 普通用户仅可查看已推送的题目（在 daily_push 中）
+        return pushPoolRepository.findPublished();
+    }
+
+    @Override
+    public List<PushPoolItem> getMyItems(User user) {
+        return pushPoolRepository.findAllBySubmitter(user.getId());
     }
 
     @Override
@@ -73,6 +73,9 @@ public class PushPoolServiceImpl implements PushPoolService {
         }
         PushPoolItem item = pushPoolRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(404, "push item not found"));
+        if (!"PENDING".equals(item.status())) {
+            throw new BusinessException(400, "only pending items can be approved");
+        }
         pushPoolRepository.updateStatus(id, "APPROVED", adminUser.getId());
         return pushPoolRepository.findById(id).orElse(item);
     }
@@ -132,8 +135,8 @@ public class PushPoolServiceImpl implements PushPoolService {
     public PushSubmission submitSolution(User user, Long pushId, String submissionLink, String resultDescription) {
         PushPoolItem item = pushPoolRepository.findById(pushId)
                 .orElseThrow(() -> new BusinessException(404, "push item not found"));
-        if (!"APPROVED".equals(item.status())) {
-            throw new BusinessException(400, "push item is not approved");
+        if (!"APPROVED".equals(item.status()) && !"PUBLISHED".equals(item.status())) {
+            throw new BusinessException(400, "push item is not available for submission");
         }
         if (submissionLink == null || submissionLink.isBlank()) {
             throw new BusinessException(400, "submission_link is required");
@@ -147,29 +150,54 @@ public class PushPoolServiceImpl implements PushPoolService {
     public List<PushSubmission> getSubmissions(User user, Long pushId) {
         PushPoolItem item = pushPoolRepository.findById(pushId)
                 .orElseThrow(() -> new BusinessException(404, "push item not found"));
-        if (user.getRole() == UserRole.ADMIN) {
+        if (user.getRole() == UserRole.ADMIN || user.getRole() == UserRole.SUPER_ADMIN) {
             return pushPoolRepository.findSubmissionsByPushId(pushId);
         }
-        return pushPoolRepository.findSubmissionsByUserId(user.getId());
+        // 普通用户仅可查看自己在该推题下的提交
+        return pushPoolRepository.findSubmissionsByPushId(pushId).stream()
+                .filter(s -> s.userId().equals(user.getId()))
+                .toList();
     }
 
     @Override
     public Optional<PushPoolItem> getTodayPush() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = timeProvider.today();
         Optional<Long> pushId = pushPoolRepository.findDailyPushId(today);
+        if (pushId.isPresent()) {
+            return pushPoolRepository.findById(pushId.get());
+        }
+        // 懒发布兜底：若今日尚未推送，立即尝试发布
+        publishDailyPushForDate(today);
+        pushId = pushPoolRepository.findDailyPushId(today);
         if (pushId.isEmpty()) {
             return Optional.empty();
         }
         return pushPoolRepository.findById(pushId.get());
     }
 
+    /**
+     * 定时任务：每日凌晨自动推送一道已审核题目。
+     *
+     * <p>默认 cron: 00:01（Asia/Shanghai），可通过 {@code app.push.daily-cron} 覆盖。
+     */
     @Scheduled(cron = "${app.push.daily-cron:0 1 0 * * *}", zone = "${app.daily-problem.zone:Asia/Shanghai}")
     public void publishDailyPush() {
-        LocalDate today = LocalDate.now();
+        publishDailyPushForDate(timeProvider.today());
+    }
+
+    /**
+     * 为指定日期发布每日推题（如果池中有已审核未推送的题目）。
+     *
+     * <p>发布后题目状态改为 PUBLISHED，与 APPROVED（已审核待推送）区分。
+     * 此方法被定时任务和懒发布兜底逻辑共用。
+     *
+     * @param date 推送日期
+     */
+    private void publishDailyPushForDate(LocalDate date) {
         Optional<PushPoolItem> next = pushPoolRepository.popNextApproved();
         if (next.isPresent()) {
-            pushPoolRepository.setDailyPush(today, next.get().id());
-            pushPoolRepository.updateSortOrder(next.get().id(), Integer.MAX_VALUE);
+            pushPoolRepository.setDailyPush(date, next.get().id());
+            pushPoolRepository.updateStatus(next.get().id(), "PUBLISHED", null);
         }
     }
 }

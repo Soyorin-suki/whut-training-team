@@ -1,5 +1,6 @@
 package com.whut.training.service.impl;
 
+import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.HomeOverview;
 import com.whut.training.domain.dto.LeaderboardItem;
 import com.whut.training.domain.entity.PushPoolItem;
@@ -22,16 +23,19 @@ public class HomeServiceImpl implements HomeService {
     private final DailyProblemRepository dailyProblemRepository;
     private final DailyProblemService dailyProblemService;
     private final PushPoolService pushPoolService;
+    private final TimeProvider timeProvider;
 
     public HomeServiceImpl(UserRepository userRepository, LeaderboardServiceImpl leaderboardService,
                            DailyProblemRepository dailyProblemRepository,
                            DailyProblemService dailyProblemService,
-                           PushPoolService pushPoolService) {
+                           PushPoolService pushPoolService,
+                           TimeProvider timeProvider) {
         this.userRepository = userRepository;
         this.leaderboardService = leaderboardService;
         this.dailyProblemRepository = dailyProblemRepository;
         this.dailyProblemService = dailyProblemService;
         this.pushPoolService = pushPoolService;
+        this.timeProvider = timeProvider;
     }
 
     @Override
@@ -42,7 +46,7 @@ public class HomeServiceImpl implements HomeService {
         List<LeaderboardItem> top = leaderboardService.getTop(topLimit, 0);
         o.setTopUsers(top);
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = timeProvider.today();
         dailyProblemService.ensureTodaySlots();
         var slots = dailyProblemRepository.findDailySlotsByDate(today);
         if (slots != null && !slots.isEmpty()) {

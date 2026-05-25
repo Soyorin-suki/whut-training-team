@@ -1,23 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
-  listPush,
+  getTodayPush,
+  getMyPushes,
+  getPushHistory,
   submitPush,
   submitPushSolution,
   getPushSubmissions,
-  approvePushItem,
-  rejectPushItem,
-  promotePushItem,
-  getPushHistory,
 } from "../api/push";
-import { useAuth } from "../context/AuthContext";
 import EmptyState from "../components/ui/EmptyState";
-import { ListSkeleton } from "../components/ui/Skeleton";
+import { CardSkeleton } from "../components/ui/Skeleton";
 import * as Accordion from "@radix-ui/react-accordion";
 
+function getTodayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function PushPage() {
-  const { isAdmin } = useAuth();
-  const [pushItems, setPushItems] = useState([]);
-  const [pushHistory, setPushHistory] = useState([]);
+  const [todayPush, setTodayPush] = useState(null);
+  const [myItems, setMyItems] = useState([]);
+  const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -34,28 +35,33 @@ export default function PushPage() {
   // Submissions view
   const [viewSubmissions, setViewSubmissions] = useState(null);
 
-  const loadPushItems = async () => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [listResp, histResp] = await Promise.all([
-        listPush(),
+      const [todayResp, mineResp, historyResp] = await Promise.all([
+        getTodayPush(),
+        getMyPushes(),
         getPushHistory(),
       ]);
-      if (listResp.code === 200) {
-        setPushItems(listResp.data || []);
+      if (todayResp.code === 200) {
+        setTodayPush(todayResp.data);
       }
-      if (histResp.code === 200) {
-        setPushHistory(histResp.data || []);
+      if (mineResp.code === 200) {
+        setMyItems(mineResp.data || []);
+      }
+      if (historyResp.code === 200) {
+        setHistoryItems(historyResp.data || []);
       }
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadPushItems();
-  }, []);
+    loadData();
+  }, [loadData]);
 
   async function handleSubmitPush() {
     if (!title.trim() || !link.trim()) {
@@ -70,7 +76,7 @@ export default function PushPage() {
         setLink("");
         setDescription("");
         setMessage("推题提交成功");
-        loadPushItems();
+        loadData();
       } else {
         setMessage(resp.message || "提交失败");
       }
@@ -99,33 +105,6 @@ export default function PushPage() {
     }
   }
 
-  async function handleApprove(pushId) {
-    try {
-      await approvePushItem(pushId);
-      loadPushItems();
-    } catch {
-      setMessage("审批失败");
-    }
-  }
-
-  async function handleReject(pushId) {
-    try {
-      await rejectPushItem(pushId);
-      loadPushItems();
-    } catch {
-      setMessage("拒绝失败");
-    }
-  }
-
-  async function handlePromote(pushId) {
-    try {
-      await promotePushItem(pushId);
-      loadPushItems();
-    } catch {
-      setMessage("提升失败");
-    }
-  }
-
   async function loadSubmissions(pushId) {
     try {
       const resp = await getPushSubmissions(pushId);
@@ -137,10 +116,6 @@ export default function PushPage() {
     }
   }
 
-  const approvedItems = pushItems.filter((i) => i.status === "APPROVED");
-  const pendingItems = pushItems.filter((i) => i.status === "PENDING");
-  const myItems = pushItems.filter((i) => i.status !== "APPROVED");
-
   return (
     <div className="space-y-5">
       <h1 className="text-lg font-semibold text-text-primary m-0">推题系统</h1>
@@ -149,110 +124,57 @@ export default function PushPage() {
         <p className="text-sm bg-bg-secondary text-text-secondary rounded-ui px-3 py-2 m-0">{message}</p>
       )}
 
+      {/* 今日推题 */}
+      <section>
+        <h2 className="text-base font-semibold text-text-primary m-0 mb-3">今日推题</h2>
+        {loading ? (
+          <CardSkeleton />
+        ) : todayPush ? (
+          <TodayPushCard
+            item={todayPush}
+            onSolve={() => setSolvePushId(todayPush.id)}
+            onViewSubmissions={() => loadSubmissions(todayPush.id)}
+          />
+        ) : (
+          <EmptyState title="今日暂无推题" description="管理员审核通过后，系统将在每日凌晨自动推送" />
+        )}
+      </section>
+
+      {/* 历史推题 */}
+      <section>
+        <h2 className="text-base font-semibold text-text-primary m-0 mb-3">
+          历史推题 ({historyItems.length})
+        </h2>
+        {loading ? (
+          <CardSkeleton />
+        ) : historyItems.length === 0 ? (
+          <EmptyState title="暂无历史推题" description="系统推送的题目将在此处显示" />
+        ) : (
+          <div className="space-y-2">
+            {historyItems
+              .filter((item) => String(item.id) !== String(todayPush?.id))
+              .map((item) => (
+                <HistoryPushCard
+                  key={item.id}
+                  item={item}
+                  onSolve={() => setSolvePushId(item.id)}
+                  onViewSubmissions={() => loadSubmissions(item.id)}
+                />
+              ))}
+          </div>
+        )}
+      </section>
+
+      {/* 我的推题 */}
       <Accordion.Root type="multiple" className="space-y-2">
-        {/* Today's / Approved push items */}
-        <Accordion.Item value="approved" className="bg-white border border-border rounded-ui overflow-hidden">
+        <Accordion.Item value="mine" className="bg-white border border-border rounded-ui overflow-hidden">
           <Accordion.Trigger className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-text-primary hover:bg-bg-secondary border-0 bg-transparent cursor-pointer">
-            <span>已发布推题 ({approvedItems.length})</span>
+            <span>我的推题 ({myItems.length})</span>
             <Chevron />
           </Accordion.Trigger>
           <Accordion.Content className="border-t border-border px-4 py-3">
-            {loading ? (
-              <ListSkeleton rows={3} />
-            ) : approvedItems.length === 0 ? (
-              <EmptyState title="暂无已发布推题" />
-            ) : (
-              <div className="space-y-2">
-                {approvedItems.map((item) => (
-                  <PushItemCard
-                    key={item.id}
-                    item={item}
-                    isAdmin={isAdmin}
-                    onSolve={() => setSolvePushId(item.id)}
-                    onPromote={() => handlePromote(item.id)}
-                    onViewSubmissions={() => loadSubmissions(item.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </Accordion.Content>
-        </Accordion.Item>
-
-        {/* Push history */}
-        <Accordion.Item value="history" className="bg-white border border-border rounded-ui overflow-hidden">
-          <Accordion.Trigger className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-text-primary hover:bg-bg-secondary border-0 bg-transparent cursor-pointer">
-            <span>推题历史 ({pushHistory.length})</span>
-            <Chevron />
-          </Accordion.Trigger>
-          <Accordion.Content className="border-t border-border px-4 py-3">
-            {pushHistory.length === 0 ? (
-              <EmptyState title="暂无推题历史" />
-            ) : (
-              <div className="space-y-2">
-                {pushHistory.map((item, idx) => (
-                  <div key={item.id || idx} className="p-3 border border-border rounded-ui">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-text-primary m-0 truncate">{item.title}</h3>
-                        {item.link && (
-                          <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline">
-                            打开链接
-                          </a>
-                        )}
-                      </div>
-                      <span className="text-xs text-text-secondary flex-shrink-0">{item.pushDate}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Accordion.Content>
-        </Accordion.Item>
-
-        {/* Pending review (admin) or my submissions (user) */}
-        <Accordion.Item value="pending" className="bg-white border border-border rounded-ui overflow-hidden">
-          <Accordion.Trigger className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-text-primary hover:bg-bg-secondary border-0 bg-transparent cursor-pointer">
-            <span>
-              {isAdmin ? `待审核推题 (${pendingItems.length})` : `我的推题 (${myItems.length})`}
-            </span>
-            <Chevron />
-          </Accordion.Trigger>
-          <Accordion.Content className="border-t border-border px-4 py-3">
-            {isAdmin ? (
-              pendingItems.length === 0 ? (
-                <EmptyState title="暂无待审核推题" />
-              ) : (
-                <div className="space-y-2">
-                  {pendingItems.map((item) => (
-                    <div key={item.id} className="flex items-start justify-between gap-3 p-3 border border-border rounded-ui">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-text-primary m-0 truncate">{item.title}</p>
-                        {item.link && (
-                          <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline">
-                            打开链接
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button
-                          className="px-2 py-1 text-xs font-medium text-white bg-success hover:bg-[#268845] rounded border-0 cursor-pointer"
-                          onClick={() => handleApprove(item.id)}
-                        >
-                          通过
-                        </button>
-                        <button
-                          className="px-2 py-1 text-xs font-medium text-white bg-error hover:bg-[#b01e28] rounded border-0 cursor-pointer"
-                          onClick={() => handleReject(item.id)}
-                        >
-                          拒绝
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : myItems.length === 0 ? (
-              <EmptyState title="暂无我的推题" description="提交推题后，管理员审核通过即可发布" />
+            {myItems.length === 0 ? (
+              <EmptyState title="暂无我的推题" description="提交推题后，可在此查看审核状态" />
             ) : (
               <div className="space-y-2">
                 {myItems.map((item) => (
@@ -260,17 +182,49 @@ export default function PushPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary m-0 truncate">{item.title}</p>
                       {item.link && (
-                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline">
-                          打开链接
+                        <a href={item.link} target="_blank" rel="noreferrer" className="text-xs text-text-secondary underline break-all">
+                          {item.link}
                         </a>
                       )}
-                      <span className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${
-                        item.status === "PENDING"
-                          ? "bg-[#fff8f0] text-warning"
-                          : "bg-[#fff0f0] text-error"
-                      }`}>
-                        {item.status === "PENDING" ? "审核中" : "已拒绝"}
+                      {item.description && (
+                        <p className="text-xs text-text-secondary mt-0.5 m-0 line-clamp-1">{item.description}</p>
+                      )}
+                      <span
+                        className={
+                          "text-xs px-1.5 py-0.5 rounded mt-1 inline-block " +
+                          (item.status === "APPROVED"
+                            ? "bg-[#f0fff0] text-success"
+                            : item.status === "PUBLISHED"
+                            ? "bg-[#f0f0ff] text-[#5865f2]"
+                            : item.status === "PENDING"
+                            ? "bg-[#fff8f0] text-warning"
+                            : "bg-[#fff0f0] text-error")
+                        }
+                      >
+                        {item.status === "APPROVED"
+                          ? "已通过"
+                          : item.status === "PUBLISHED"
+                          ? "已推送"
+                          : item.status === "PENDING"
+                          ? "审核中"
+                          : "已拒绝"}
                       </span>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {(item.status === "APPROVED" || item.status === "PUBLISHED") && (
+                        <button
+                          className="px-2 py-1 text-xs font-medium text-white bg-success hover:bg-[#268845] rounded border-0 cursor-pointer"
+                          onClick={() => setSolvePushId(item.id)}
+                        >
+                          提交解答
+                        </button>
+                      )}
+                      <button
+                        className="px-2 py-1 text-xs text-text-secondary border border-border rounded bg-white hover:bg-bg-secondary cursor-pointer"
+                        onClick={() => loadSubmissions(item.id)}
+                      >
+                        查看提交
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -279,7 +233,7 @@ export default function PushPage() {
           </Accordion.Content>
         </Accordion.Item>
 
-        {/* Submit new push */}
+        {/* 提交推题 */}
         <Accordion.Item value="submit" className="bg-white border border-border rounded-ui overflow-hidden">
           <Accordion.Trigger className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-text-primary hover:bg-bg-secondary border-0 bg-transparent cursor-pointer">
             <span>提交推题</span>
@@ -317,10 +271,10 @@ export default function PushPage() {
         </Accordion.Item>
       </Accordion.Root>
 
-      {/* Solve modal (inline) */}
+      {/* Solve modal */}
       {solvePushId && (
-        <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center">
-          <div className="bg-white rounded-ui border border-border p-6 w-[400px] max-w-[90vw] shadow-lg z-50">
+        <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center" onClick={() => setSolvePushId(null)}>
+          <div className="bg-white rounded-ui border border-border p-6 w-[400px] max-w-[90vw] shadow-lg z-50" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-semibold text-text-primary m-0 mb-4">提交解答</h3>
             <input
               className="w-full px-3 py-2 text-sm border border-border rounded-ui outline-none focus:border-text-primary mb-2"
@@ -337,7 +291,7 @@ export default function PushPage() {
             />
             <div className="flex justify-end gap-2">
               <button
-                className="px-3 py-1.5 text-sm border border-border rounded-ui bg-white text-text-primary hover:bg-bg-secondary"
+                className="px-3 py-1.5 text-sm border border-border rounded-ui bg-white text-text-primary hover:bg-bg-secondary cursor-pointer"
                 onClick={() => setSolvePushId(null)}
               >
                 取消
@@ -352,20 +306,120 @@ export default function PushPage() {
           </div>
         </div>
       )}
+
+      {/* Submissions view modal */}
+      {viewSubmissions && (
+        <div className="fixed inset-0 bg-black/30 z-40 flex items-center justify-center" onClick={() => setViewSubmissions(null)}>
+          <div className="bg-white rounded-ui border border-border p-6 w-[500px] max-w-[90vw] max-h-[80vh] overflow-y-auto shadow-lg z-50" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold text-text-primary m-0 mb-4">解答提交记录</h3>
+            {viewSubmissions.items.length === 0 ? (
+              <EmptyState title="暂无提交" />
+            ) : (
+              <div className="space-y-2">
+                {viewSubmissions.items.map((sub) => (
+                  <div key={sub.id} className="p-3 border border-border rounded-ui">
+                    <a href={sub.submissionLink} target="_blank" rel="noreferrer" className="text-sm text-text-primary underline break-all">
+                      {sub.submissionLink}
+                    </a>
+                    {sub.resultDescription && (
+                      <p className="text-xs text-text-secondary mt-1 m-0">{sub.resultDescription}</p>
+                    )}
+                    {sub.createdAt && (
+                      <p className="text-xs text-text-secondary mt-0.5 m-0">{sub.createdAt}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                className="px-3 py-1.5 text-sm border border-border rounded-ui bg-white text-text-primary hover:bg-bg-secondary cursor-pointer"
+                onClick={() => setViewSubmissions(null)}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function PushItemCard({ item, isAdmin, onSolve, onPromote, onViewSubmissions }) {
+/** 今日推题卡片——展示标题、链接、描述与推题用户名 */
+function TodayPushCard({ item, onSolve, onViewSubmissions }) {
   return (
-    <div className="p-3 border border-border rounded-ui">
+    <div className="bg-white border border-border rounded-ui p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-text-primary m-0 truncate">{item.title}</h3>
-          {item.description ? (
-            <p className="text-xs text-text-secondary mt-0.5 m-0 line-clamp-2">{item.description}</p>
-          ) : (
-            <p className="text-xs text-text-secondary mt-0.5 m-0">无描述</p>
+          <h3 className="text-base font-semibold text-text-primary m-0 truncate">{item.title}</h3>
+          {item.submitterUsername && (
+            <p className="text-xs text-text-secondary mt-1 m-0">
+              推题人：{item.submitterUsername}
+            </p>
+          )}
+          {item.description && (
+            <p className="text-sm text-text-primary mt-2 m-0">{item.description}</p>
+          )}
+          {item.link && (
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block mt-2 text-xs text-text-secondary hover:text-text-primary underline break-all"
+            >
+              {item.link}
+            </a>
+          )}
+        </div>
+        <div className="flex gap-1.5 flex-shrink-0">
+          <button
+            className="px-2.5 py-1 text-xs font-medium text-white bg-success hover:bg-[#268845] rounded border-0 cursor-pointer"
+            onClick={onSolve}
+          >
+            提交解答
+          </button>
+          <button
+            className="px-2.5 py-1 text-xs text-text-secondary border border-border rounded bg-white hover:bg-bg-secondary cursor-pointer"
+            onClick={onViewSubmissions}
+          >
+            查看提交
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 历史推题卡片——展示标题、链接、描述、推题用户名与推送日期 */
+function HistoryPushCard({ item, onSolve, onViewSubmissions }) {
+  return (
+    <div className="bg-white border border-border rounded-ui p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-text-primary m-0 truncate">{item.title}</h3>
+            {item.pushDate && (
+              <span className="text-xs text-text-secondary flex-shrink-0">{item.pushDate}</span>
+            )}
+          </div>
+          {item.submitterUsername && (
+            <p className="text-xs text-text-secondary mt-1 m-0">
+              推题人：{item.submitterUsername}
+            </p>
+          )}
+          {item.description && (
+            <p className="text-xs text-text-secondary mt-0.5 m-0 line-clamp-1">{item.description}</p>
+          )}
+          {item.link && (
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block mt-1 text-xs text-text-secondary hover:text-text-primary underline break-all"
+            >
+              {item.link}
+            </a>
           )}
         </div>
         <div className="flex gap-1 flex-shrink-0">
@@ -375,14 +429,6 @@ function PushItemCard({ item, isAdmin, onSolve, onPromote, onViewSubmissions }) 
           >
             提交解答
           </button>
-          {isAdmin && (
-            <button
-              className="px-2 py-1 text-xs font-medium text-text-secondary border border-border rounded bg-white hover:bg-bg-secondary cursor-pointer"
-              onClick={onPromote}
-            >
-              提升
-            </button>
-          )}
           <button
             className="px-2 py-1 text-xs text-text-secondary border border-border rounded bg-white hover:bg-bg-secondary cursor-pointer"
             onClick={onViewSubmissions}

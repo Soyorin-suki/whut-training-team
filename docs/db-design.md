@@ -2,6 +2,8 @@
 
 当前后端使用 SQLite，核心表如下。
 
+> **数据库解耦说明**：数据库初始化通过 `DatabaseInitializer` 接口抽象，当前实现为 `SqliteInitializer`（`@ConditionalOnProperty(name="app.database.type", havingValue="sqlite")`）。如要切换数据库，只需：1) 提供新的 `DatabaseInitializer` 实现；2) 修改 `application.yml` 中 `app.database.type`、`spring.datasource.*` 与驱动依赖。Repository 层使用 `JdbcTemplate`（标准 SQL），不受数据库切换影响。
+
 ## 1) `users`（用户表）
 | 字段名 | 类型 | 约束 | 说明 |
 | --- | --- | --- | --- |
@@ -121,7 +123,7 @@
 | link | TEXT | NOT NULL | 题目链接 |
 | description | TEXT | NULL | 题目描述 |
 | submitter_id | INTEGER | NOT NULL | 提交者用户 ID |
-| status | TEXT | NOT NULL DEFAULT 'PENDING' | 状态：PENDING/APPROVED/REJECTED |
+| status | TEXT | NOT NULL DEFAULT 'PENDING' | 状态：PENDING/APPROVED/PUBLISHED/REJECTED |
 | sort_order | INTEGER | NULL | 排序序号（越小越靠前） |
 | created_at | DATETIME | NULL | 创建时间 |
 | approved_by | INTEGER | NULL | 审批者用户 ID |

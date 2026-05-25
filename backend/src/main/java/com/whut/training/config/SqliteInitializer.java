@@ -1,6 +1,7 @@
 package com.whut.training.config;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -15,10 +16,13 @@ import java.util.Map;
 /**
  * SQLite 数据库初始化器。
  *
- * <p>应用启动时负责创建目录、初始化表结构和补充缺失列。该实现依赖本地 SQLite 文件，属于启动阶段的基础设施代码。
+ * <p>应用启动时负责创建目录、初始化表结构和通过 PRAGMA 补充缺失列。
+ * 仅当 {@code app.database.type=sqlite}（默认）时激活。
+ * 实现 {@link DatabaseInitializer} 接口，可通过替换实现类切换数据库。
  */
 @Component
-public class SqliteInitializer {
+@ConditionalOnProperty(name = "app.database.type", havingValue = "sqlite", matchIfMissing = true)
+public class SqliteInitializer implements DatabaseInitializer {
 
     private final JdbcTemplate jdbcTemplate;
     private final DataSourceProperties dataSourceProperties;
@@ -39,6 +43,7 @@ public class SqliteInitializer {
      *
      * @throws IOException 当数据库文件目录创建失败时抛出。
      */
+    @Override
     @PostConstruct
     public void init() throws IOException {
         createSqliteParentDirIfNeeded();
@@ -219,6 +224,12 @@ public class SqliteInitializer {
                     changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
+
+        // 数据迁移：将已推送但状态仍为 APPROVED 的历史题目标记为 PUBLISHED
+        jdbcTemplate.update("""
+                UPDATE push_pool SET status = 'PUBLISHED'
+                WHERE status = 'APPROVED' AND id IN (SELECT push_id FROM daily_push)
+                """);
     }
 
     /**
@@ -232,7 +243,10 @@ public class SqliteInitializer {
             return;
         }
 
-        String dbPath = url.substring("jdbc:sqlite:".length());
+        String afterPrefix = url.substring("jdbc:sqlite:".length());
+        // 剥离查询参数（如 ?busy_timeout=5000），避免将其误认为文件名的一部分
+        int queryIdx = afterPrefix.indexOf('?');
+        String dbPath = queryIdx >= 0 ? afterPrefix.substring(0, queryIdx) : afterPrefix;
         if (dbPath.isBlank()) {
             return;
         }

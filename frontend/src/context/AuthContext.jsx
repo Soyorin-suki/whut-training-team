@@ -55,9 +55,12 @@ function reducer(state, action) {
         isAuthenticated: false,
         isAdmin: false,
         isSuperAdmin: false,
+        isDevBackend: false,
         isLoading: false,
       };
     }
+    case "SET_DEV_MODE":
+      return { ...state, isDevBackend: action.payload };
     default:
       return state;
   }
@@ -70,6 +73,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: false,
     isAdmin: false,
     isSuperAdmin: false,
+    isDevBackend: false,
     isLoading: true,
   });
 
@@ -120,6 +124,10 @@ export function AuthProvider({ children }) {
     dispatch({ type: "UPDATE_TOKENS", payload: tokens });
   }, []);
 
+  const setDevMode = useCallback((active) => {
+    dispatch({ type: "SET_DEV_MODE", payload: active });
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -129,6 +137,7 @@ export function AuthProvider({ children }) {
         logout,
         updateUser,
         updateTokens,
+        setDevMode,
       }}
     >
       {children}

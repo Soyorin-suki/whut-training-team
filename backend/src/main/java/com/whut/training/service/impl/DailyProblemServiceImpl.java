@@ -1,6 +1,7 @@
 package com.whut.training.service.impl;
 
 import com.whut.training.aspect.annotation.ServiceLog;
+import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.*;
 import com.whut.training.domain.entity.CfProblem;
 import com.whut.training.domain.entity.DailyProblem;
@@ -34,6 +35,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     private final DailyProblemRepository dailyProblemRepository;
     private final CodeforcesApiService codeforcesApiService;
     private final com.whut.training.repository.UserRepository userRepository;
+    private final TimeProvider timeProvider;
     private final Object generationLock = new Object();
     private final ConcurrentHashMap<Long, Object> userCheckinLocks = new ConcurrentHashMap<>();
     private final int defaultMinRating;
@@ -41,19 +43,11 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     private final int noRepeatDays;
     private final int ratingThreshold;
 
-    /**
-     * 创建每日题服务实现。
-     *
-     * @param dailyProblemRepository 题目仓储。
-     * @param codeforcesApiService   Codeforces API 服务。
-     * @param defaultMinRating       默认最小难度。
-     * @param defaultMaxRating       默认最大难度。
-     * @param noRepeatDays           避免重复命中的天数窗口。
-     */
     public DailyProblemServiceImpl(
             DailyProblemRepository dailyProblemRepository,
             CodeforcesApiService codeforcesApiService,
             com.whut.training.repository.UserRepository userRepository,
+            TimeProvider timeProvider,
             @Value("${app.daily-problem.min-rating:1200}") int defaultMinRating,
             @Value("${app.daily-problem.max-rating:1600}") int defaultMaxRating,
             @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays,
@@ -62,6 +56,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         this.dailyProblemRepository = dailyProblemRepository;
         this.codeforcesApiService = codeforcesApiService;
         this.userRepository = userRepository;
+        this.timeProvider = timeProvider;
         this.defaultMinRating = defaultMinRating;
         this.defaultMaxRating = defaultMaxRating;
         this.noRepeatDays = noRepeatDays;
@@ -88,8 +83,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Scheduled(cron = "${app.daily-problem.cron:0 5 0 * * *}", zone = "${app.daily-problem.zone:Asia/Shanghai}")
     public void generateDailyProblemByScheduler() {
-        ensureDailyProblem(LocalDate.now(), false, "scheduler");
-        ensureDailySlots(LocalDate.now(), false, "scheduler");
+        LocalDate today = timeProvider.today();
+        ensureDailyProblem(today, false, "scheduler");
+        ensureDailySlots(today, false, "scheduler");
     }
 
     /**
@@ -108,7 +104,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public DailyProblemTodayResponse getToday(User user) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = timeProvider.today();
         ensureDailySlots(today, false, "api");
 
         List<com.whut.training.domain.entity.DailyProblemSlot> slots =
@@ -153,7 +149,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public CheckInResultResponse checkIn(User user, Long submissionId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = timeProvider.today();
         // support multi-slot daily: try to find matching slot (easy/hard) first
         ensureDailyProblem(today, false, "api");
         ensureDailySlots(today, false, "api");
@@ -235,7 +231,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public List<DailyProblemHistoryItem> getHistory(User user, int days) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = timeProvider.today();
         LocalDate startDate;
         if (days <= 0) {
             startDate = LocalDate.of(2020, 1, 1);
@@ -264,7 +260,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
         CfProblem problem = dailyProblemRepository.findRandomProblem(resolvedMinRating, resolvedMaxRating)
                 .orElseThrow(() -> new BusinessException(404, "no problem available for this rating range"));
-        UserPracticeDraw draw = dailyProblemRepository.insertPracticeDraw(user.getId(), LocalDate.now(), problem);
+        UserPracticeDraw draw = dailyProblemRepository.insertPracticeDraw(user.getId(), timeProvider.today(), problem);
         return new PracticeDrawResponse(
                 draw.id(),
                 new ProblemView(
@@ -328,7 +324,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
     @Override
     public void ensureTodaySlots() {
-        ensureDailySlots(LocalDate.now(), false, "api-home");
+        ensureDailySlots(timeProvider.today(), false, "api-home");
     }
 
     @Override
@@ -347,7 +343,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         if (adminUser == null || (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN)) {
             throw new BusinessException(403, "admin role required");
         }
-        DailyProblem dailyProblem = ensureDailyProblem(LocalDate.now(), true, "admin");
+        DailyProblem dailyProblem = ensureDailyProblem(timeProvider.today(), true, "admin");
         return toProblemView("DAILY", dailyProblem);
     }
 
@@ -356,7 +352,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         if (adminUser == null || (adminUser.getRole() != UserRole.ADMIN && adminUser.getRole() != UserRole.SUPER_ADMIN)) {
             throw new BusinessException(403, "admin role required");
         }
-        LocalDate target = date == null ? LocalDate.now() : date;
+        LocalDate target = date == null ? timeProvider.today() : date;
         // ensure slots exist
         ensureDailySlots(target, false, "admin-redraw");
 

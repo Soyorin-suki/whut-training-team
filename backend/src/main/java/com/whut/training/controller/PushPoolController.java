@@ -36,6 +36,20 @@ public class PushPoolController {
         return ApiResponse.ok(pushPoolService.list(user));
     }
 
+    @GetMapping("/push/today")
+    public ApiResponse<PushPoolItem> today() {
+        requireCurrentUser();
+        return pushPoolService.getTodayPush()
+                .map(ApiResponse::ok)
+                .orElse(ApiResponse.ok(null));
+    }
+
+    @GetMapping("/push/mine")
+    public ApiResponse<List<PushPoolItem>> mine() {
+        User user = requireCurrentUser();
+        return ApiResponse.ok(pushPoolService.getMyItems(user));
+    }
+
     @PostMapping("/push/{id}/submit")
     public ApiResponse<PushSubmission> submitSolution(@PathVariable Long id, @RequestBody Map<String, String> body) {
         User user = requireCurrentUser();

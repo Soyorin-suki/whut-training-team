@@ -23,6 +23,13 @@ public class PushPoolRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /** push_pool LEFT JOIN users 的公共 SELECT 片段，统一获取 submitter_username */
+    private static final String SELECT_WITH_USER =
+            "SELECT pp.id, pp.title, pp.link, pp.description, pp.submitter_id,"
+            + " u.username AS submitter_username, pp.status, pp.sort_order,"
+            + " pp.created_at, pp.approved_by, pp.approved_at"
+            + " FROM push_pool pp LEFT JOIN users u ON pp.submitter_id = u.id";
+
     private final RowMapper<PushPoolItem> poolItemRowMapper = (rs, rowNum) -> {
         Timestamp ca = rs.getTimestamp("created_at");
         Timestamp aa = rs.getTimestamp("approved_at");
@@ -34,6 +41,7 @@ public class PushPoolRepository {
                 rs.getString("link"),
                 rs.getString("description"),
                 rs.getLong("submitter_id"),
+                rs.getString("submitter_username"),
                 rs.getString("status"),
                 rs.getInt("sort_order"),
                 ca != null ? ca.toLocalDateTime() : null,
@@ -72,12 +80,12 @@ public class PushPoolRepository {
             return stmt;
         }, keyHolder);
         Long id = keyHolder.getKey() == null ? null : keyHolder.getKey().longValue();
-        return new PushPoolItem(id, title, link, description, submitterId, "PENDING", null, now.toLocalDateTime(), null, null);
+        return new PushPoolItem(id, title, link, description, submitterId, null, "PENDING", null, now.toLocalDateTime(), null, null);
     }
 
     public Optional<PushPoolItem> findById(Long id) {
         List<PushPoolItem> rows = jdbcTemplate.query(
-                "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool WHERE id = ?",
+                SELECT_WITH_USER + " WHERE pp.id = ?",
                 poolItemRowMapper, id
         );
         return rows.stream().findFirst();
@@ -85,21 +93,29 @@ public class PushPoolRepository {
 
     public List<PushPoolItem> findAllByStatus(String status) {
         return jdbcTemplate.query(
-                "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool WHERE status = ? ORDER BY sort_order ASC",
+                SELECT_WITH_USER + " WHERE pp.status = ? ORDER BY pp.sort_order ASC",
                 poolItemRowMapper, status
         );
     }
 
     public List<PushPoolItem> findAllBySubmitter(Long submitterId) {
         return jdbcTemplate.query(
-                "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool WHERE submitter_id = ? ORDER BY created_at DESC",
+                SELECT_WITH_USER + " WHERE pp.submitter_id = ? ORDER BY pp.created_at DESC",
                 poolItemRowMapper, submitterId
         );
     }
 
     public List<PushPoolItem> findAll() {
         return jdbcTemplate.query(
-                "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool ORDER BY sort_order ASC",
+                SELECT_WITH_USER + " ORDER BY pp.sort_order ASC",
+                poolItemRowMapper
+        );
+    }
+
+    /** 查询所有已推送的题目（在 daily_push 表中），按推送日期降序 */
+    public List<PushPoolItem> findPublished() {
+        return jdbcTemplate.query(
+                SELECT_WITH_USER + " INNER JOIN daily_push dp ON pp.id = dp.push_id ORDER BY dp.date DESC",
                 poolItemRowMapper
         );
     }
@@ -117,7 +133,7 @@ public class PushPoolRepository {
 
     public Optional<PushPoolItem> popNextApproved() {
         List<PushPoolItem> rows = jdbcTemplate.query(
-                "SELECT id, title, link, description, submitter_id, status, sort_order, created_at, approved_by, approved_at FROM push_pool WHERE status = 'APPROVED' ORDER BY sort_order ASC LIMIT 1",
+                SELECT_WITH_USER + " WHERE pp.status = 'APPROVED' ORDER BY pp.sort_order ASC LIMIT 1",
                 poolItemRowMapper
         );
         return rows.stream().findFirst();
@@ -191,9 +207,13 @@ public class PushPoolRepository {
         return rows > 0;
     }
 
+    /**
+     * 查询所有已审核但尚未推送的题目（status = APPROVED）。
+     * PUBLISHED 状态的题目已被推送，不在此列。
+     */
     public List<PushPoolItem> findApprovedUnpublished() {
         return jdbcTemplate.query(
-                "SELECT pp.id, pp.title, pp.link, pp.description, pp.submitter_id, pp.status, pp.sort_order, pp.created_at, pp.approved_by, pp.approved_at FROM push_pool pp WHERE pp.status = 'APPROVED' AND pp.id NOT IN (SELECT push_id FROM daily_push) ORDER BY pp.sort_order ASC",
+                SELECT_WITH_USER + " WHERE pp.status = 'APPROVED' ORDER BY pp.sort_order ASC",
                 poolItemRowMapper
         );
     }
@@ -203,7 +223,10 @@ public class PushPoolRepository {
      */
     public List<Map<String, Object>> findPushedHistory() {
         return jdbcTemplate.query(
-                "SELECT dp.date AS push_date, pp.id, pp.title, pp.link, pp.description, pp.submitter_id, pp.status, pp.sort_order, pp.created_at, pp.approved_by, pp.approved_at FROM daily_push dp JOIN push_pool pp ON dp.push_id = pp.id ORDER BY dp.date DESC",
+                "SELECT dp.date AS push_date, pp.id, pp.title, pp.link, pp.description, pp.submitter_id,"
+                + " u.username AS submitter_username, pp.status, pp.sort_order, pp.created_at, pp.approved_by, pp.approved_at"
+                + " FROM daily_push dp JOIN push_pool pp ON dp.push_id = pp.id"
+                + " LEFT JOIN users u ON pp.submitter_id = u.id ORDER BY dp.date DESC",
                 (rs, rowNum) -> {
                     Timestamp ca = rs.getTimestamp("created_at");
                     Timestamp aa = rs.getTimestamp("approved_at");
@@ -214,6 +237,7 @@ public class PushPoolRepository {
                     map.put("link", rs.getString("link"));
                     map.put("description", rs.getString("description"));
                     map.put("submitterId", rs.getLong("submitter_id"));
+                    map.put("submitterUsername", rs.getString("submitter_username"));
                     map.put("status", rs.getString("status"));
                     map.put("sortOrder", rs.getInt("sort_order"));
                     map.put("createdAt", ca != null ? ca.toLocalDateTime().toString() : null);
