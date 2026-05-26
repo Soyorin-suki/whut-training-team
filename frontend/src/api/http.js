@@ -2,7 +2,7 @@ import axios from "axios";
 import { clearStoredAuth, getStoredAuth, setStoredAuth } from "../auth";
 
 const http = axios.create({
-  baseURL: "http://localhost:8080",
+  baseURL: "/",
   timeout: 10000,
 });
 
@@ -23,7 +23,7 @@ async function refreshAccessToken() {
   }
 
   const response = await axios.post(
-    "http://localhost:8080/api/auth/refresh",
+    "/api/auth/refresh",
     {},
     { headers: { "X-Refresh-Token": refreshToken } }
   );
