@@ -1,0 +1,32 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whut-training-backend
+    ports:
+      - "8080:8080"
+    volumes:
+      # 将后端产生的 sqlite 数据挂载到宿主机，防止重启清理掉数据
+      - backend-data:/app/data
+      # 你也可以选择挂载 logs 以便查看日志
+      - backend-logs:/app/logs
+    environment:
+      - TZ=Asia/Shanghai
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: whut-training-frontend
+    ports:
+      # 映射到宿主机的 80 端口，可通过 http://localhost 访问
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  backend-data:
+  backend-logs:
