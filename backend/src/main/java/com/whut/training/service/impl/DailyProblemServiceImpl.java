@@ -49,7 +49,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             com.whut.training.repository.UserRepository userRepository,
             TimeProvider timeProvider,
             @Value("${app.daily-problem.min-rating:1200}") int defaultMinRating,
-            @Value("${app.daily-problem.max-rating:1600}") int defaultMaxRating,
+            @Value("${app.daily-problem.max-rating:2000}") int defaultMaxRating,
             @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays,
             @Value("${app.daily.ratingThreshold:1700}") int ratingThreshold
     ) {
@@ -109,30 +109,52 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
         List<com.whut.training.domain.entity.DailyProblemSlot> slots =
                 dailyProblemRepository.findDailySlotsByDate(today);
+        Optional<com.whut.training.domain.entity.UserDailyStatus> statusOptional =
+                dailyProblemRepository.findUserDailyStatus(user.getId(), today);
 
         List<ProblemView> problems;
         if (slots != null && !slots.isEmpty()) {
             problems = slots.stream()
-                    .map(s -> new ProblemView(
-                            s.slot().toUpperCase(),
-                            s.date().toString(),
-                            s.problemKey(),
-                            s.contestId(),
-                            s.problemIndex(),
-                            s.name(),
-                            s.rating(),
-                            s.tags(),
-                            s.sourceUrl()
-                    ))
+                    .filter(s -> !s.isRedrawn())
+                    .map(s -> {
+                        var slotStatus = dailyProblemRepository.findUserDailySlotStatus(
+                                user.getId(),
+                                s.date(),
+                                s.problemKey()
+                        );
+                        boolean checkedIn = slotStatus.isPresent()
+                                || statusOptional.filter(status -> status.score() != null && status.score().equals(s.rating())).isPresent();
+                        Integer score = slotStatus
+                                .map(com.whut.training.domain.entity.UserDailyStatus::score)
+                                .orElseGet(() -> checkedIn
+                                        ? statusOptional.map(com.whut.training.domain.entity.UserDailyStatus::score).orElse(0)
+                                        : 0);
+                        return new ProblemView(
+                                s.slot().toUpperCase(),
+                                s.date().toString(),
+                                s.problemKey(),
+                                s.contestId(),
+                                s.problemIndex(),
+                                s.name(),
+                                s.rating(),
+                                s.tags(),
+                                s.sourceUrl(),
+                                checkedIn,
+                                score
+                        );
+                    })
                     .toList();
         } else {
             // fallback to legacy single daily problem
             DailyProblem dailyProblem = ensureDailyProblem(today, false, "api");
-            problems = List.of(toProblemView("DAILY", dailyProblem));
+            problems = List.of(toProblemView(
+                    "DAILY",
+                    dailyProblem,
+                    statusOptional.isPresent(),
+                    statusOptional.map(com.whut.training.domain.entity.UserDailyStatus::score).orElse(0)
+            ));
         }
 
-        Optional<com.whut.training.domain.entity.UserDailyStatus> statusOptional =
-                dailyProblemRepository.findUserDailyStatus(user.getId(), today);
         return new DailyProblemTodayResponse(
                 problems,
                 statusOptional.isPresent(),
@@ -151,25 +173,24 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     public CheckInResultResponse checkIn(User user, Long submissionId) {
         LocalDate today = timeProvider.today();
         // support multi-slot daily: try to find matching slot (easy/hard) first
-        ensureDailyProblem(today, false, "api");
         ensureDailySlots(today, false, "api");
 
         List<com.whut.training.domain.entity.DailyProblemSlot> slots = dailyProblemRepository.findDailySlotsByDate(today);
+        List<com.whut.training.domain.entity.DailyProblemSlot> activeSlots = slots == null
+                ? List.of()
+                : slots.stream()
+                .filter(slot -> !slot.isRedrawn())
+                .toList();
 
         CodeforcesApiService.SubmissionStatus submissionStatus = null;
         com.whut.training.domain.entity.DailyProblemSlot matchedSlot = null;
-        if (slots != null && !slots.isEmpty()) {
+        if (!activeSlots.isEmpty()) {
             // try to match submission to one of the non-redrawn slots
-            for (com.whut.training.domain.entity.DailyProblemSlot slot : slots) {
-                if (slot.isRedrawn()) {
-                    continue;
-                }
+            for (com.whut.training.domain.entity.DailyProblemSlot slot : activeSlots) {
                 try {
                     submissionStatus = verifySubmission(user.getUsername(), submissionId, slot.contestId(), slot.problemIndex());
-                    if ("OK".equalsIgnoreCase(submissionStatus.verdict())) {
-                        matchedSlot = slot;
-                        break;
-                    }
+                    matchedSlot = slot;
+                    break;
                 } catch (BusinessException ex) {
                     // not this slot, continue
                 }
@@ -177,7 +198,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         }
 
         // fallback to original single daily problem
-        com.whut.training.domain.entity.DailyProblem single = dailyProblemRepository.findDailyByDate(today).orElse(null);
+        com.whut.training.domain.entity.DailyProblem single = activeSlots.isEmpty()
+                ? ensureDailyProblem(today, false, "api")
+                : null;
         if (matchedSlot == null && single != null) {
             try {
                 submissionStatus = verifySubmission(user.getUsername(), submissionId, single.contestId(), single.problemIndex());
@@ -193,6 +216,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             throw new BusinessException(400, "提交未通过或不匹配今日题目");
         }
 
+        if (!"OK".equalsIgnoreCase(submissionStatus.verdict())) {
+            throw new BusinessException(400, "submission is not accepted, verdict=" + submissionStatus.verdict());
+        }
+
         int newScore = 0;
         if (matchedSlot != null) {
             newScore = matchedSlot.rating() == null ? 0 : matchedSlot.rating();
@@ -202,23 +229,44 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
         Object userLock = userCheckinLocks.computeIfAbsent(user.getId(), k -> new Object());
         synchronized (userLock) {
-            var existingOpt = dailyProblemRepository.findUserDailyStatus(user.getId(), today);
-            if (existingOpt.isPresent()) {
-                int oldDayScore = existingOpt.get().score();
-                if (newScore <= oldDayScore) {
-                    dailyProblemRepository.updateUserDailyStatus(user.getId(), today, submissionId, submissionStatus.verdict(), oldDayScore);
-                    return new CheckInResultResponse(matchedSlot == null ? "DAILY" : matchedSlot.slot().toUpperCase(), true, submissionId, submissionStatus.verdict(), oldDayScore);
-                } else {
-                    int delta = newScore - oldDayScore;
-                    dailyProblemRepository.updateUserDailyStatus(user.getId(), today, submissionId, submissionStatus.verdict(), newScore);
-                    userRepository.incrementTotalPoints(user.getId(), delta);
-                    return new CheckInResultResponse(matchedSlot == null ? "DAILY" : matchedSlot.slot().toUpperCase(), true, submissionId, submissionStatus.verdict(), newScore);
-                }
-            } else {
-                dailyProblemRepository.saveUserDailyStatus(user.getId(), today, submissionId, submissionStatus.verdict(), newScore);
-                userRepository.incrementTotalPoints(user.getId(), newScore);
-                return new CheckInResultResponse(matchedSlot == null ? "DAILY" : matchedSlot.slot().toUpperCase(), true, submissionId, submissionStatus.verdict(), newScore);
+            String type = matchedSlot == null ? "DAILY" : matchedSlot.slot().toUpperCase();
+            String slot = matchedSlot == null ? "daily" : matchedSlot.slot();
+            String problemKey = matchedSlot == null ? single.problemKey() : matchedSlot.problemKey();
+
+            var existingSlotOpt = dailyProblemRepository.findUserDailySlotStatus(user.getId(), today, problemKey);
+            int slotScore = existingSlotOpt
+                    .map(com.whut.training.domain.entity.UserDailyStatus::score)
+                    .map(oldScore -> Math.max(oldScore, newScore))
+                    .orElse(newScore);
+            dailyProblemRepository.saveUserDailySlotStatus(
+                    user.getId(),
+                    today,
+                    slot,
+                    problemKey,
+                    submissionId,
+                    submissionStatus.verdict(),
+                    slotScore
+            );
+
+            var existingDayOpt = dailyProblemRepository.findUserDailyStatus(user.getId(), today);
+            int oldDayScore = existingDayOpt
+                    .map(com.whut.training.domain.entity.UserDailyStatus::score)
+                    .orElse(0);
+            int nextDayScore = Math.max(
+                    oldDayScore,
+                    dailyProblemRepository.maxUserDailySlotScore(user.getId(), today)
+            );
+            dailyProblemRepository.upsertUserDailyStatus(
+                    user.getId(),
+                    today,
+                    submissionId,
+                    submissionStatus.verdict(),
+                    nextDayScore
+            );
+            if (nextDayScore > oldDayScore) {
+                userRepository.incrementTotalPoints(user.getId(), nextDayScore - oldDayScore);
             }
+            return new CheckInResultResponse(type, true, submissionId, submissionStatus.verdict(), nextDayScore);
         }
     }
 
@@ -232,6 +280,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     @Override
     public List<DailyProblemHistoryItem> getHistory(User user, int days) {
         LocalDate today = timeProvider.today();
+        ensureDailySlots(today, false, "history");
         LocalDate startDate;
         if (days <= 0) {
             startDate = LocalDate.of(2020, 1, 1);
@@ -434,9 +483,15 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     private void ensureDailySlots(LocalDate date, boolean forceRegenerate, String generatedBy) {
         synchronized (generationLock) {
+            boolean hasActiveEasy = false;
+            boolean hasActiveHard = false;
             if (!forceRegenerate) {
                 List<com.whut.training.domain.entity.DailyProblemSlot> exist = dailyProblemRepository.findDailySlotsByDate(date);
-                if (exist != null && !exist.isEmpty()) {
+                hasActiveEasy = exist != null && exist.stream()
+                        .anyMatch(slot -> !slot.isRedrawn() && "easy".equalsIgnoreCase(slot.slot()));
+                hasActiveHard = exist != null && exist.stream()
+                        .anyMatch(slot -> !slot.isRedrawn() && "hard".equalsIgnoreCase(slot.slot()));
+                if (hasActiveEasy && hasActiveHard) {
                     return;
                 }
             } else {
@@ -449,14 +504,14 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             // easy: defaultMinRating .. ratingThreshold
             Integer easyMin = defaultMinRating;
             Integer easyMax = Math.min(defaultMaxRating, ratingThreshold);
-            CfProblem easy = dailyProblemRepository.findRandomProblem(easyMin, easyMax, noRepeatAfterDate)
+            CfProblem easy = hasActiveEasy ? null : dailyProblemRepository.findRandomProblem(easyMin, easyMax, noRepeatAfterDate)
                     .or(() -> dailyProblemRepository.findRandomProblem(easyMin, easyMax))
                     .orElse(null);
 
             // hard: ratingThreshold+1 .. defaultMaxRating
             Integer hardMin = Math.max(defaultMinRating, ratingThreshold + 1);
             Integer hardMax = defaultMaxRating;
-            CfProblem hard = dailyProblemRepository.findRandomProblem(hardMin, hardMax, noRepeatAfterDate)
+            CfProblem hard = hasActiveHard ? null : dailyProblemRepository.findRandomProblem(hardMin, hardMax, noRepeatAfterDate)
                     .or(() -> dailyProblemRepository.findRandomProblem(hardMin, hardMax))
                     .orElse(null);
 
@@ -535,6 +590,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      * @return 题目视图。
      */
     private ProblemView toProblemView(String type, DailyProblem dailyProblem) {
+        return toProblemView(type, dailyProblem, false, 0);
+    }
+
+    private ProblemView toProblemView(String type, DailyProblem dailyProblem, boolean checkedIn, Integer score) {
         return new ProblemView(
                 type,
                 dailyProblem.date().toString(),
@@ -544,7 +603,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 dailyProblem.name(),
                 dailyProblem.rating(),
                 dailyProblem.tags(),
-                dailyProblem.sourceUrl()
+                dailyProblem.sourceUrl(),
+                checkedIn,
+                score
         );
     }
 }

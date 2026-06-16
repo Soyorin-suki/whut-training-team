@@ -63,6 +63,14 @@ public class DailyProblemRepository {
             rs.getInt("score")
     );
 
+    private final RowMapper<UserDailyStatus> userDailySlotStatusRowMapper = (rs, rowNum) -> new UserDailyStatus(
+            rs.getLong("user_id"),
+            LocalDate.parse(rs.getString("date")),
+            rs.getLong("submission_id"),
+            rs.getString("verdict"),
+            rs.getInt("score")
+    );
+
     private final RowMapper<UserPracticeDraw> userPracticeDrawRowMapper = (rs, rowNum) -> new UserPracticeDraw(
             rs.getLong("id"),
             rs.getLong("user_id"),
@@ -386,6 +394,60 @@ public class DailyProblemRepository {
         return rows.stream().findFirst();
     }
 
+    public Optional<UserDailyStatus> findUserDailySlotStatus(Long userId, LocalDate date, String problemKey) {
+        List<UserDailyStatus> rows = jdbcTemplate.query(
+                """
+                        SELECT user_id, date, submission_id, verdict, score
+                        FROM user_daily_slot_status
+                        WHERE user_id = ? AND date = ? AND problem_key = ?
+                        """,
+                userDailySlotStatusRowMapper,
+                userId,
+                date.toString(),
+                problemKey
+        );
+        return rows.stream().findFirst();
+    }
+
+    public void saveUserDailySlotStatus(Long userId, LocalDate date, String slot, String problemKey,
+                                        Long submissionId, String verdict, int score) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO user_daily_slot_status (
+                            user_id, date, slot, problem_key, submission_id, verdict, checked_at, score
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(user_id, date, problem_key) DO UPDATE SET
+                            slot = excluded.slot,
+                            submission_id = excluded.submission_id,
+                            verdict = excluded.verdict,
+                            checked_at = excluded.checked_at,
+                            score = excluded.score
+                        """,
+                userId,
+                date.toString(),
+                slot,
+                problemKey,
+                submissionId,
+                verdict,
+                OffsetDateTime.now().toString(),
+                score
+        );
+    }
+
+    public int maxUserDailySlotScore(Long userId, LocalDate date) {
+        Integer score = jdbcTemplate.queryForObject(
+                """
+                        SELECT COALESCE(MAX(score), 0)
+                        FROM user_daily_slot_status
+                        WHERE user_id = ? AND date = ?
+                        """,
+                Integer.class,
+                userId,
+                date.toString()
+        );
+        return score == null ? 0 : score;
+    }
+
     /**
      * 保存今日题打卡结果。
      *
@@ -400,6 +462,26 @@ public class DailyProblemRepository {
                 """
                         INSERT INTO user_daily_status (user_id, date, submission_id, verdict, checked_at, score)
                         VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                userId,
+                date.toString(),
+                submissionId,
+                verdict,
+                OffsetDateTime.now().toString(),
+                score
+        );
+    }
+
+    public void upsertUserDailyStatus(Long userId, LocalDate date, Long submissionId, String verdict, int score) {
+        jdbcTemplate.update(
+                """
+                        INSERT INTO user_daily_status (user_id, date, submission_id, verdict, checked_at, score)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(user_id, date) DO UPDATE SET
+                            submission_id = excluded.submission_id,
+                            verdict = excluded.verdict,
+                            checked_at = excluded.checked_at,
+                            score = excluded.score
                         """,
                 userId,
                 date.toString(),
@@ -436,21 +518,52 @@ public class DailyProblemRepository {
     public List<DailyProblemHistoryItem> findDailyHistoryForUser(Long userId, LocalDate startDate, LocalDate endDate) {
         return jdbcTemplate.query(
                 """
-                        SELECT s.date,
-                               s.slot,
-                               s.problem_key,
-                               s.name,
-                               s.rating,
-                               s.source_url,
-                               s.is_redrawn,
-                               u.submission_id,
-                               u.verdict,
-                               u.score
-                        FROM daily_problem_slot s
-                        LEFT JOIN user_daily_status u
-                            ON u.user_id = ? AND u.date = s.date
-                        WHERE s.date BETWEEN ? AND ?
-                        ORDER BY s.date DESC
+                        SELECT p.date,
+                               p.slot,
+                               p.problem_key,
+                               p.name,
+                               p.rating,
+                               p.source_url,
+                               p.is_redrawn,
+                               CASE
+                                   WHEN us.submission_id IS NOT NULL THEN us.submission_id
+                                   WHEN p.slot = 'daily' OR ud.score = p.rating THEN ud.submission_id
+                                   ELSE NULL
+                               END AS submission_id,
+                               CASE
+                                   WHEN us.submission_id IS NOT NULL THEN us.verdict
+                                   WHEN p.slot = 'daily' OR ud.score = p.rating THEN ud.verdict
+                                   ELSE NULL
+                               END AS verdict,
+                               CASE
+                                   WHEN us.submission_id IS NOT NULL THEN us.score
+                                   WHEN p.slot = 'daily' OR ud.score = p.rating THEN ud.score
+                                   ELSE NULL
+                               END AS score
+                        FROM (
+                            SELECT date, slot, problem_key, name, rating, source_url, is_redrawn
+                            FROM daily_problem_slot
+                            WHERE date BETWEEN ? AND ?
+                            UNION ALL
+                            SELECT d.date,
+                                   'daily' AS slot,
+                                   d.problem_key,
+                                   d.name,
+                                   d.rating,
+                                   d.source_url,
+                                   0 AS is_redrawn
+                            FROM daily_problem d
+                            WHERE d.date BETWEEN ? AND ?
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM daily_problem_slot s
+                                  WHERE s.date = d.date
+                              )
+                        ) p
+                        LEFT JOIN user_daily_slot_status us
+                            ON us.user_id = ? AND us.date = p.date AND us.problem_key = p.problem_key
+                        LEFT JOIN user_daily_status ud
+                            ON ud.user_id = ? AND ud.date = p.date
+                        ORDER BY p.date DESC, p.slot ASC
                         """,
                 (rs, rowNum) -> new DailyProblemHistoryItem(
                         rs.getString("date"),
@@ -465,9 +578,12 @@ public class DailyProblemRepository {
                         rs.getString("verdict"),
                         (Integer) rs.getObject("score")
                 ),
-                userId,
                 startDate.toString(),
-                endDate.toString()
+                endDate.toString(),
+                startDate.toString(),
+                endDate.toString(),
+                userId,
+                userId
         );
     }
 
@@ -552,8 +668,16 @@ public class DailyProblemRepository {
      */
     public int countCheckedInUsersByDate(LocalDate date) {
         Integer c = jdbcTemplate.queryForObject(
-                "SELECT COUNT(DISTINCT user_id) FROM user_daily_status WHERE date = ?",
+                """
+                        SELECT COUNT(DISTINCT user_id)
+                        FROM (
+                            SELECT user_id FROM user_daily_status WHERE date = ?
+                            UNION
+                            SELECT user_id FROM user_daily_slot_status WHERE date = ?
+                        ) t
+                        """,
                 Integer.class,
+                date.toString(),
                 date.toString()
         );
         return c == null ? 0 : c;
@@ -561,8 +685,22 @@ public class DailyProblemRepository {
 
     public int countSubmissionsByDate(LocalDate date) {
         Integer c = jdbcTemplate.queryForObject(
-                "SELECT COUNT(1) FROM user_daily_status WHERE date = ?",
+                """
+                        SELECT
+                            (SELECT COUNT(1) FROM user_daily_slot_status WHERE date = ?)
+                            +
+                            (SELECT COUNT(1)
+                             FROM user_daily_status uds
+                             WHERE uds.date = ?
+                               AND NOT EXISTS (
+                                   SELECT 1
+                                   FROM user_daily_slot_status uss
+                                   WHERE uss.user_id = uds.user_id
+                                     AND uss.date = uds.date
+                               ))
+                        """,
                 Integer.class,
+                date.toString(),
                 date.toString()
         );
         return c == null ? 0 : c;

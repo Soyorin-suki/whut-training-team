@@ -145,6 +145,23 @@ public class SqliteInitializer implements DatabaseInitializer {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_user_daily_status_user ON user_daily_status(user_id)");
 
         jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS user_daily_slot_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    slot TEXT NOT NULL,
+                    problem_key TEXT NOT NULL,
+                    submission_id INTEGER NOT NULL,
+                    verdict TEXT NOT NULL,
+                    checked_at TEXT NOT NULL,
+                    score INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE(user_id, date, problem_key)
+                )
+                """);
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_user_daily_slot_status_user_date ON user_daily_slot_status(user_id, date)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_user_daily_slot_status_problem ON user_daily_slot_status(problem_key)");
+
+        jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS user_practice_draw (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,

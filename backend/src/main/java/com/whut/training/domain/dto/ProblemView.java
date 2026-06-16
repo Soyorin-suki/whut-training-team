@@ -22,6 +22,21 @@ public record ProblemView(
         String name,
         Integer rating,
         String tags,
-        String sourceUrl
+        String sourceUrl,
+        boolean checkedIn,
+        Integer score
 ) {
+    public ProblemView(
+            String type,
+            String date,
+            String problemKey,
+            Integer contestId,
+            String problemIndex,
+            String name,
+            Integer rating,
+            String tags,
+            String sourceUrl
+    ) {
+        this(type, date, problemKey, contestId, problemIndex, name, rating, tags, sourceUrl, false, 0);
+    }
 }

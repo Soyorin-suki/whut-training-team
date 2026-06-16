@@ -147,34 +147,44 @@ public class DevController {
             matchedSlotName = matchedSlot.slot();
         }
 
-        // 检查是否已打卡
-        var existing = dailyProblemRepository.findUserDailyStatus(targetUserId, date);
-        if (existing.isPresent()) {
-            int oldScore = existing.get().score();
-            if (score > oldScore) {
-                int delta = score - oldScore;
-                dailyProblemRepository.updateUserDailyStatus(targetUserId, date,
-                        0L, "OK (dev)", score);
-                userRepository.incrementTotalPoints(targetUserId, delta);
-            }
-            return ApiResponse.ok(Map.of(
-                    "date", date.toString(),
-                    "slot", matchedSlotName,
-                    "score", score,
-                    "message", "already checked in, updated to higher score"
-            ));
+        if (matchedSlot == null) {
+            return ApiResponse.fail(404, "daily slot not found");
         }
 
-        dailyProblemRepository.saveUserDailyStatus(targetUserId, date,
-                0L, "OK (dev)", score);
-        if (score > 0) {
-            userRepository.incrementTotalPoints(targetUserId, score);
+        // 检查是否已打卡
+        var existingSlot = dailyProblemRepository.findUserDailySlotStatus(targetUserId, date, matchedSlot.problemKey());
+        int slotScore = existingSlot
+                .map(com.whut.training.domain.entity.UserDailyStatus::score)
+                .map(oldScore -> Math.max(oldScore, score))
+                .orElse(score);
+        dailyProblemRepository.saveUserDailySlotStatus(
+                targetUserId,
+                date,
+                matchedSlot.slot(),
+                matchedSlot.problemKey(),
+                0L,
+                "OK (dev)",
+                slotScore
+        );
+
+        var existingDay = dailyProblemRepository.findUserDailyStatus(targetUserId, date);
+        int oldDayScore = existingDay
+                .map(com.whut.training.domain.entity.UserDailyStatus::score)
+                .orElse(0);
+        int nextDayScore = Math.max(
+                oldDayScore,
+                dailyProblemRepository.maxUserDailySlotScore(targetUserId, date)
+        );
+        dailyProblemRepository.upsertUserDailyStatus(targetUserId, date, 0L, "OK (dev)", nextDayScore);
+        if (nextDayScore > oldDayScore) {
+            userRepository.incrementTotalPoints(targetUserId, nextDayScore - oldDayScore);
         }
 
         return ApiResponse.ok(Map.of(
                 "date", date.toString(),
                 "slot", matchedSlotName,
-                "score", score,
+                "score", slotScore,
+                "dailyScore", nextDayScore,
                 "message", "force check-in success"
         ));
     }

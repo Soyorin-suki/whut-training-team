@@ -1,21 +1,42 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { getTodayProblem, checkInToday, getDailyHistory } from "../api/dailyProblem";
-import ProblemCard from "../components/ui/ProblemCard";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { checkInToday, getDailyHistory, getTodayProblem } from "../api/dailyProblem";
 import CheckInModal from "../components/ui/CheckInModal";
-import Pagination from "../components/ui/Pagination";
-import { CardSkeleton } from "../components/ui/Skeleton";
 import EmptyState from "../components/ui/EmptyState";
-import { useAuth } from "../context/AuthContext";
+import Pagination from "../components/ui/Pagination";
+import ProblemCard from "../components/ui/ProblemCard";
+import { CardSkeleton } from "../components/ui/Skeleton";
 
 const PAGE_SIZE = 10;
+const TEXT = {
+  title: "\u6bcf\u65e5\u4e00\u9898",
+  loadTodayFailed: "\u83b7\u53d6\u4eca\u65e5\u9898\u5931\u8d25",
+  loadDataFailed: "\u52a0\u8f7d\u6bcf\u65e5\u9898\u6570\u636e\u5931\u8d25",
+  checkInFailed: "\u6821\u9a8c\u5931\u8d25",
+  requestFailed: "\u8bf7\u6c42\u5931\u8d25",
+  checkedIn: "\u5df2\u6253\u5361",
+  submitCheckIn: "\u63d0\u4ea4\u6253\u5361",
+  redrawnCheckedIn: "\u9898\u76ee\u5df2\u5237\u65b0 \u00b7 \u5df2\u6253\u5361",
+  notGenerated: "\u4eca\u65e5\u9898\u76ee\u5c1a\u672a\u751f\u6210",
+  history: "\u5386\u53f2\u8bb0\u5f55",
+  noHistory: "\u6682\u65e0\u5386\u53f2\u8bb0\u5f55",
+  checkedCount: "\u5df2\u6253\u5361",
+  redrawn: "\u5df2\u88ab\u5237\u65b0",
+  checkedBeforeRedraw: "\u5df2\u6253\u5361\uff08\u5df2\u5237\u65b0\uff09",
+  notCheckedIn: "\u672a\u6253\u5361",
+  currentScore: "\u5f53\u524d\u5f97\u5206",
+  completed: "\u4eca\u65e5\u5df2\u6253\u5361",
+  problemsUnit: "\u9898",
+  checkIn: "\u6253\u5361",
+};
 
 function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-/**
- * Parse contestId and problemIndex from problemKey like "1234-A".
- */
 function parseProblemKey(key) {
   const idx = key?.lastIndexOf("-");
   if (idx > 0) {
@@ -28,14 +49,12 @@ function parseProblemKey(key) {
 }
 
 export default function DailyProblemPage() {
-  const { isAdmin } = useAuth();
   const [todayData, setTodayData] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Check-in modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInResult, setCheckInResult] = useState(null);
@@ -45,20 +64,20 @@ export default function DailyProblemPage() {
     setLoading(true);
     setError("");
     try {
-      const [todayResp, historyResp] = await Promise.all([
-        getTodayProblem(),
-        getDailyHistory(0),
-      ]);
+      const todayResp = await getTodayProblem();
+      const historyResp = await getDailyHistory(0);
+
       if (todayResp.code === 200) {
         setTodayData(todayResp.data);
       } else {
-        setError(todayResp.message || "获取今日题失败");
+        setError(todayResp.message || TEXT.loadTodayFailed);
       }
+
       if (historyResp.code === 200) {
         setHistoryData(historyResp.data || []);
       }
     } catch {
-      setError("加载每日题数据失败");
+      setError(TEXT.loadDataFailed);
     } finally {
       setLoading(false);
     }
@@ -74,12 +93,12 @@ export default function DailyProblemPage() {
       const resp = await checkInToday(submissionId);
       if (resp.code === 200) {
         setCheckInResult(resp.data);
-        loadData(); // refresh
+        loadData();
       } else {
         setCheckInResult({
           accepted: false,
           submissionId,
-          verdict: resp.message || "校验失败",
+          verdict: resp.message || TEXT.checkInFailed,
           score: 0,
         });
       }
@@ -87,7 +106,7 @@ export default function DailyProblemPage() {
       setCheckInResult({
         accepted: false,
         submissionId,
-        verdict: "请求失败",
+        verdict: TEXT.requestFailed,
         score: 0,
       });
     } finally {
@@ -109,27 +128,25 @@ export default function DailyProblemPage() {
     }
   }
 
-  // Compute today's display logic
   const today = getTodayStr();
   const todayDisplay = useMemo(() => {
     const todayHistory = historyData.filter((item) => item.date === today);
-    // Redrawn items: checked-in → show in today area; not checked-in → hide from today
     const redrawnCheckedIn = todayHistory.filter((item) => item.isRedrawn && item.checkedIn);
     const redrawnNotCheckedInKeys = new Set(
-      todayHistory.filter((item) => item.isRedrawn && !item.checkedIn).map((item) => item.problemKey)
+      todayHistory
+        .filter((item) => item.isRedrawn && !item.checkedIn)
+        .map((item) => item.problemKey)
     );
-    // Active slots from API, excluding redrawn-not-checked-in ones
     const active = (todayData?.problems || []).filter(
-      (p) => !redrawnNotCheckedInKeys.has(p.problemKey)
+      (problem) => !redrawnNotCheckedInKeys.has(problem.problemKey)
     );
-    // Convert checked-in redrawn history items to display format
     const extra = redrawnCheckedIn.map((item) => {
-      const pk = parseProblemKey(item.problemKey);
+      const parsed = parseProblemKey(item.problemKey);
       return {
         ...item,
         type: (item.slot || "DAILY").toUpperCase(),
-        contestId: pk.contestId,
-        problemIndex: pk.problemIndex,
+        contestId: parsed.contestId,
+        problemIndex: parsed.problemIndex,
         tags: "",
         isRedrawnCheckedIn: true,
       };
@@ -140,14 +157,13 @@ export default function DailyProblemPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <h1 className="text-lg font-semibold">每日一题</h1>
+        <h1 className="text-lg font-semibold">{TEXT.title}</h1>
         <CardSkeleton />
         <CardSkeleton />
       </div>
     );
   }
 
-  // Group history by date for display
   const groupedHistory = groupByDate(historyData);
   const historyDates = Object.keys(groupedHistory).sort().reverse();
   const totalHistoryPages = Math.ceil(historyDates.length / PAGE_SIZE);
@@ -158,64 +174,67 @@ export default function DailyProblemPage() {
 
   const hasTodayContent =
     todayDisplay.active.length > 0 || todayDisplay.extra.length > 0;
+  const todayCompletedCount =
+    todayDisplay.active.filter((problem) => problem.checkedIn).length + todayDisplay.extra.length;
+  const todayTotalCount = todayDisplay.active.length + todayDisplay.extra.length;
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-semibold text-text-primary m-0">每日一题</h1>
+      <h1 className="text-lg font-semibold text-text-primary m-0">{TEXT.title}</h1>
 
       {error && (
         <p className="text-sm text-error bg-[#fff0f0] rounded-ui px-3 py-2 m-0">{error}</p>
       )}
 
-      {/* Today's problems */}
       {hasTodayContent ? (
         <div className="space-y-3">
-          {/* Active (non-redrawn) slots */}
-          {todayDisplay.active.map((p) => (
-            <div key={p.problemKey}>
-              <ProblemCard problem={p} />
+          {todayDisplay.active.map((problem) => (
+            <div key={problem.problemKey}>
+              <ProblemCard problem={problem} />
               <div className="mt-1.5 flex justify-end">
                 <button
                   className="px-3 py-1 text-xs font-medium text-white bg-success hover:bg-[#268845] rounded-ui border-0 cursor-pointer disabled:opacity-40"
-                  disabled={todayData.checkedIn}
-                  onClick={() => openCheckIn(p)}
+                  disabled={problem.checkedIn}
+                  onClick={() => openCheckIn(problem)}
                 >
-                  {todayData.checkedIn ? "今日已打卡" : "提交打卡"}
+                  {problem.checkedIn ? TEXT.checkedIn : TEXT.submitCheckIn}
                 </button>
               </div>
             </div>
           ))}
-          {/* Redrawn but checked-in slots — show as 已打卡 */}
-          {todayDisplay.extra.map((p) => (
-            <div key={p.problemKey}>
-              <ProblemCard problem={p} />
+
+          {todayDisplay.extra.map((problem) => (
+            <div key={problem.problemKey}>
+              <ProblemCard problem={problem} />
               <div className="mt-1.5 flex justify-end gap-2 items-center">
                 <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-0.5 rounded">
-                  题目已刷新 · 已打卡
+                  {TEXT.redrawnCheckedIn}
                 </span>
                 <span className="text-sm text-success font-medium">
-                  +{p.score ?? 0}
+                  +{problem.score ?? 0}
                 </span>
               </div>
             </div>
           ))}
-          {todayData.checkedIn && (
+
+          {todayData?.checkedIn && (
             <p className="text-sm text-success m-0">
-              今日已打卡，当前得分：{todayData.score ?? 0}
+              {TEXT.completed} {todayCompletedCount}/{todayTotalCount} {TEXT.problemsUnit}
+              {", "}
+              {TEXT.currentScore}: {todayData.score ?? 0}
             </p>
           )}
         </div>
       ) : (
         <div className="bg-white border border-border rounded-ui p-8 text-center text-sm text-text-secondary">
-          今日题目尚未生成
+          {TEXT.notGenerated}
         </div>
       )}
 
-      {/* History */}
       <section>
-        <h2 className="text-base font-semibold text-text-primary m-0 mb-3">历史记录</h2>
+        <h2 className="text-base font-semibold text-text-primary m-0 mb-3">{TEXT.history}</h2>
         {historyDates.length === 0 ? (
-          <EmptyState title="暂无历史记录" />
+          <EmptyState title={TEXT.noHistory} />
         ) : (
           <div className="space-y-1">
             {pagedDates.map((date) => {
@@ -225,13 +244,13 @@ export default function DailyProblemPage() {
                   <summary className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-bg-secondary list-none">
                     <span className="text-sm font-medium text-text-primary">{date}</span>
                     <span className="text-xs text-text-secondary">
-                      {items.filter((i) => i.checkedIn).length}/{items.length} 已打卡
+                      {items.filter((item) => item.checkedIn).length}/{items.length} {TEXT.checkedCount}
                     </span>
                   </summary>
                   <div className="border-t border-border">
-                    {items.map((item, idx) => (
+                    {items.map((item, index) => (
                       <div
-                        key={idx}
+                        key={`${item.problemKey}-${index}`}
                         className="flex items-center justify-between px-4 py-2 text-sm"
                       >
                         <div className="flex items-center gap-2">
@@ -255,11 +274,11 @@ export default function DailyProblemPage() {
                           <span className="text-text-secondary">({item.rating ?? "-"})</span>
                           {item.isRedrawn && !item.checkedIn && (
                             <span className="text-[11px] text-text-secondary bg-bg-secondary px-1.5 py-0.5 rounded">
-                              已被刷新
+                              {TEXT.redrawn}
                             </span>
                           )}
                           {item.isRedrawn && item.checkedIn && (
-                            <span className="text-[11px] text-text-secondary">已打卡（已刷新）</span>
+                            <span className="text-[11px] text-text-secondary">{TEXT.checkedBeforeRedraw}</span>
                           )}
                         </div>
                         <div>
@@ -268,7 +287,7 @@ export default function DailyProblemPage() {
                               +{item.score ?? 0}
                             </span>
                           ) : (
-                            <span className="text-text-secondary">未打卡</span>
+                            <span className="text-text-secondary">{TEXT.notCheckedIn}</span>
                           )}
                         </div>
                       </div>
@@ -286,14 +305,13 @@ export default function DailyProblemPage() {
         />
       </section>
 
-      {/* Check-in modal */}
       <CheckInModal
         open={modalOpen}
         onOpenChange={handleModalClose}
         onCheckIn={handleCheckIn}
         loading={checkInLoading}
         result={checkInResult}
-        title={selectedSlot ? `打卡 ${selectedSlot.name}` : "提交打卡"}
+        title={selectedSlot ? `${TEXT.checkIn} ${selectedSlot.name}` : TEXT.submitCheckIn}
       />
     </div>
   );
@@ -302,9 +320,9 @@ export default function DailyProblemPage() {
 function groupByDate(historyItems) {
   const groups = {};
   for (const item of historyItems) {
-    const d = item.date || "unknown";
-    if (!groups[d]) groups[d] = [];
-    groups[d].push(item);
+    const date = item.date || "unknown";
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(item);
   }
   return groups;
 }
