@@ -1,7 +1,10 @@
 package com.whut.training.service.impl;
 
 import com.whut.training.aspect.annotation.ServiceLog;
+import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.CodeforcesBindingResponse;
+import com.whut.training.domain.dto.CodeforcesBindingStartRequest;
 import com.whut.training.domain.dto.UserUpdateRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
@@ -20,14 +23,20 @@ import java.util.Optional;
 /**
  * 用户服务实现。
  *
- * <p>负责普通注册、管理员创建用户、用户资料更新和用户查询。注册与改名都会调用 Codeforces 校验 handle，确保用户名与平台账号一致。当前密码仍以明文方式存储，是已知风险。
+ * <p>负责站内账号注册、Codeforces 所有权验证绑定、管理员创建用户、
+ * 用户资料更新和查询。站内用户名与 Codeforces Handle 相互独立。
+ * 当前密码仍以明文方式存储，是已知风险。
  */
 @Service
 @ServiceLog
 public class UserServiceImpl implements UserService {
 
+    private static final long CODEFORCES_BINDING_TTL_SECONDS = 120;
+    private static final String CODEFORCES_VERIFICATION_URL = "https://codeforces.com/contest/1/problem/A";
+
     private final UserRepository userRepository;
     private final CodeforcesApiService codeforcesApiService;
+    private final TimeProvider timeProvider;
 
     /**
      * 创建用户服务实现。
@@ -35,9 +44,11 @@ public class UserServiceImpl implements UserService {
      * @param userRepository      用户仓储。
      * @param codeforcesApiService Codeforces API 服务。
      */
-    public UserServiceImpl(UserRepository userRepository, CodeforcesApiService codeforcesApiService) {
+    public UserServiceImpl(UserRepository userRepository, CodeforcesApiService codeforcesApiService,
+                           TimeProvider timeProvider) {
         this.userRepository = userRepository;
         this.codeforcesApiService = codeforcesApiService;
+        this.timeProvider = timeProvider;
     }
 
     /**
@@ -52,25 +63,14 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(400, "username already exists");
         }
 
-        Optional<CodeforcesApiService.CodeforcesUserProfile> profileOptional =
-                codeforcesApiService.getUserInfo(request.getUsername());
-        if (profileOptional.isEmpty()) {
-            throw new BusinessException(400, "username is not a valid Codeforces handle");
-        }
-
         User user = new User(
                 null,
                 request.getUsername(),
                 normalizeNullableText(request.getEmail()),
                 request.getPassword(),
-                UserRole.USER,
-                request.getCodeforcesRating(),
-                request.getMaxRating(),
-                request.getOnline(),
-                request.getLastOnlineTimeSeconds(),
-                normalizeNullableText(request.getAvatarUrl())
+                UserRole.USER
         );
-        enrichFromCodeforcesIfNeeded(user, profileOptional.get());
+        user.setDisplayName(request.getDisplayName().trim());
         return userRepository.save(user);
     }
 
@@ -128,7 +128,7 @@ public class UserServiceImpl implements UserService {
     /**
      * 更新用户资料。
      *
-     * <p>如果用户名发生变化，会重新校验 Codeforces handle 并同步统计信息。邮箱支持置空，密码留空则不更新。
+     * <p>站内用户名和 Codeforces Handle 相互独立。邮箱支持置空，密码留空则不更新。
      *
      * @param userId  用户 ID。
      * @param request 更新请求。
@@ -150,13 +150,7 @@ public class UserServiceImpl implements UserService {
                 if (userRepository.existsByUsername(nextUsername)) {
                     throw new BusinessException(400, "username already exists");
                 }
-                Optional<CodeforcesApiService.CodeforcesUserProfile> profileOptional =
-                        codeforcesApiService.getUserInfo(nextUsername);
-                if (profileOptional.isEmpty()) {
-                    throw new BusinessException(400, "username is not a valid Codeforces handle");
-                }
                 user.setUsername(nextUsername);
-                syncCodeforcesStats(user, profileOptional.get());
             }
         }
 
@@ -179,13 +173,84 @@ public class UserServiceImpl implements UserService {
         }
 
         if (request.avatar() != null) {
-            user.setAvatarUrl(normalizeNullableText(request.avatar()));
+            String avatarUrl = normalizeNullableText(request.avatar());
+            user.setAvatarUrl(avatarUrl);
+            user.setAvatarCustomized(avatarUrl != null);
         }
 
         if (request.bio() != null) {
             user.setBio(normalizeNullableText(request.bio()));
         }
 
+        if (request.showProblemTags() != null) {
+            user.setShowProblemTags(request.showProblemTags());
+        }
+
+        return userRepository.save(user);
+    }
+
+    @Override
+    public CodeforcesBindingResponse startCodeforcesBinding(Long userId, CodeforcesBindingStartRequest request) {
+        User user = getById(userId);
+        String handle = request.getHandle().trim();
+
+        Optional<User> boundUser = userRepository.findByCodeforcesHandle(handle);
+        if (boundUser.isPresent() && !boundUser.get().getId().equals(userId)) {
+            throw new BusinessException(400, "this Codeforces handle is already bound");
+        }
+
+        if (codeforcesApiService.getUserInfo(handle).isEmpty()) {
+            throw new BusinessException(400, "Codeforces handle does not exist or Codeforces API is unavailable");
+        }
+
+        long startedAtSeconds = timeProvider.nowEpochSecond();
+        user.setPendingCodeforcesHandle(handle);
+        user.setCodeforcesBindingStartedAtSeconds(startedAtSeconds);
+        userRepository.save(user);
+
+        return new CodeforcesBindingResponse(
+                handle,
+                startedAtSeconds + CODEFORCES_BINDING_TTL_SECONDS,
+                CODEFORCES_VERIFICATION_URL,
+                "Submit a compilation error to Codeforces 1A within 2 minutes, then finish verification"
+        );
+    }
+
+    @Override
+    public User finishCodeforcesBinding(Long userId) {
+        User user = getById(userId);
+        String pendingHandle = user.getPendingCodeforcesHandle();
+        Long startedAtSeconds = user.getCodeforcesBindingStartedAtSeconds();
+        if (pendingHandle == null || pendingHandle.isBlank() || startedAtSeconds == null) {
+            throw new BusinessException(400, "Codeforces binding has not been started");
+        }
+
+        long nowSeconds = timeProvider.nowEpochSecond();
+        if (nowSeconds - startedAtSeconds > CODEFORCES_BINDING_TTL_SECONDS) {
+            clearPendingCodeforcesBinding(user);
+            userRepository.save(user);
+            throw new BusinessException(400, "Codeforces binding verification expired; please start again");
+        }
+
+        Optional<Boolean> verification =
+                codeforcesApiService.hasOwnershipVerificationSubmission(pendingHandle, startedAtSeconds);
+        if (verification.isEmpty()) {
+            throw new BusinessException(503, "Codeforces API is unavailable; please try again");
+        }
+        if (!verification.get()) {
+            throw new BusinessException(400, "No qualifying compilation-error submission was found");
+        }
+
+        Optional<User> boundUser = userRepository.findByCodeforcesHandle(pendingHandle);
+        if (boundUser.isPresent() && !boundUser.get().getId().equals(userId)) {
+            throw new BusinessException(400, "this Codeforces handle is already bound");
+        }
+
+        CodeforcesApiService.CodeforcesUserProfile profile = codeforcesApiService.getUserInfo(pendingHandle)
+                .orElseThrow(() -> new BusinessException(503, "Codeforces API is unavailable; please try again"));
+        user.setCodeforcesHandle(pendingHandle);
+        syncCodeforcesProfile(user, profile);
+        clearPendingCodeforcesBinding(user);
         return userRepository.save(user);
     }
 
@@ -195,11 +260,15 @@ public class UserServiceImpl implements UserService {
      * @param user    用户。
      * @param profile Codeforces 资料。
      */
-    private void syncCodeforcesStats(User user, CodeforcesApiService.CodeforcesUserProfile profile) {
+    private void syncCodeforcesProfile(User user, CodeforcesApiService.CodeforcesUserProfile profile) {
         user.setCodeforcesRating(profile.rating());
         user.setMaxRating(profile.maxRating());
         user.setOnline(profile.online());
         user.setLastOnlineTimeSeconds(profile.lastOnlineTimeSeconds());
+        if (!Boolean.TRUE.equals(user.getAvatarCustomized())) {
+            user.setAvatarUrl(profile.avatarUrl());
+        }
+        user.setUid(parseUidFromAvatarUrl(profile.avatarUrl()));
     }
 
     /**
@@ -236,6 +305,11 @@ public class UserServiceImpl implements UserService {
             user.setAvatarUrl(profile.avatarUrl());
         }
         user.setUid(parseUidFromAvatarUrl(user.getAvatarUrl()));
+    }
+
+    private void clearPendingCodeforcesBinding(User user) {
+        user.setPendingCodeforcesHandle(null);
+        user.setCodeforcesBindingStartedAtSeconds(null);
     }
 
     /**

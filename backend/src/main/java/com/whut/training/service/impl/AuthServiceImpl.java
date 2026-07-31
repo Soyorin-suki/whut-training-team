@@ -89,6 +89,10 @@ public class AuthServiceImpl implements AuthService {
                 user.getOnline(),
                 user.getLastOnlineTimeSeconds(),
                 user.getAvatarUrl(),
+                user.getCodeforcesHandle(),
+                user.getPendingCodeforcesHandle(),
+                user.getCodeforcesBindingStartedAtSeconds(),
+                user.getDisplayName(),
                 pair.accessToken(),
                 pair.refreshToken()
         );
@@ -221,15 +225,18 @@ public class AuthServiceImpl implements AuthService {
      * @param user 当前用户。
      */
     private void syncAvatarFromCodeforcesOnLogin(User user) {
-        if (user == null || user.getUsername() == null || user.getUsername().isBlank()) {
+        if (user == null || user.getCodeforcesHandle() == null || user.getCodeforcesHandle().isBlank()) {
             return;
         }
-        codeforcesApiService.getUserInfo(user.getUsername()).ifPresent(profile -> {
+        codeforcesApiService.getUserInfo(user.getCodeforcesHandle()).ifPresent(profile -> {
             String latestAvatarUrl = profile.avatarUrl();
             Long latestUid = parseUidFromAvatarUrl(latestAvatarUrl);
             boolean changed = false;
 
-            if (latestAvatarUrl != null && !latestAvatarUrl.isBlank() && !latestAvatarUrl.equals(user.getAvatarUrl())) {
+            if (!Boolean.TRUE.equals(user.getAvatarCustomized())
+                    && latestAvatarUrl != null
+                    && !latestAvatarUrl.isBlank()
+                    && !latestAvatarUrl.equals(user.getAvatarUrl())) {
                 user.setAvatarUrl(latestAvatarUrl);
                 changed = true;
             }

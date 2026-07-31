@@ -1,0 +1,268 @@
+package com.whut.training.service;
+
+import com.whut.training.domain.dto.CodeforcesOverview;
+import com.whut.training.domain.entity.User;
+import com.whut.training.exception.BusinessException;
+import com.whut.training.repository.CodeforcesProfileSnapshotRepository;
+import com.whut.training.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 汇总并缓存 Codeforces 用户公开统计。
+ *
+ * <p>内存缓存服务当前进程的热点请求，SQLite 快照保证重启后仍能快速返回。
+ * 过期快照采用 stale-while-revalidate，先响应旧数据，再在后台刷新。
+ */
+@Service
+public class CodeforcesProfileService {
+
+    private static final int SUBMISSION_LIMIT = 10000;
+    private static final int RECENT_CONTEST_LIMIT = 8;
+
+    private final UserRepository userRepository;
+    private final CodeforcesApiService codeforcesApiService;
+    private final CodeforcesProfileSnapshotRepository snapshotRepository;
+    private final Duration cacheDuration;
+    private final Map<Long, CacheEntry> memoryCache = new ConcurrentHashMap<>();
+    private final Map<Long, Object> refreshLocks = new ConcurrentHashMap<>();
+    private final Set<Long> refreshingUsers = ConcurrentHashMap.newKeySet();
+
+    public CodeforcesProfileService(
+            UserRepository userRepository,
+            CodeforcesApiService codeforcesApiService,
+            CodeforcesProfileSnapshotRepository snapshotRepository,
+            @Value("${codeforces.profile-cache-minutes:30}") long cacheMinutes
+    ) {
+        this.userRepository = userRepository;
+        this.codeforcesApiService = codeforcesApiService;
+        this.snapshotRepository = snapshotRepository;
+        this.cacheDuration = Duration.ofMinutes(Math.max(1, cacheMinutes));
+    }
+
+    public CodeforcesOverview getOverview(Long userId) {
+        User user = requireUser(userId);
+        String handle = normalizeHandle(user.getCodeforcesHandle());
+        if (handle == null) {
+            return emptyOverview();
+        }
+
+        CacheEntry cached = memoryCache.get(userId);
+        if (cached != null && handle.equalsIgnoreCase(cached.handle()) && isFresh(cached.syncedAt())) {
+            return cached.overview().withStale(false);
+        }
+
+        Optional<CodeforcesProfileSnapshotRepository.Snapshot> stored = snapshotRepository.find(userId, handle);
+        if (stored.isPresent()) {
+            CodeforcesProfileSnapshotRepository.Snapshot snapshot = stored.get();
+            memoryCache.put(userId, new CacheEntry(handle, snapshot.overview(), snapshot.syncedAt()));
+            if (isFresh(snapshot.syncedAt())) {
+                return snapshot.overview().withStale(false);
+            }
+            refreshInBackground(userId);
+            return snapshot.overview().withStale(true);
+        }
+
+        return refresh(userId);
+    }
+
+    public CodeforcesOverview refresh(Long userId) {
+        synchronized (refreshLocks.computeIfAbsent(userId, ignored -> new Object())) {
+            User user = requireUser(userId);
+            String handle = normalizeHandle(user.getCodeforcesHandle());
+            if (handle == null) {
+                return emptyOverview();
+            }
+            return refreshNow(user, handle);
+        }
+    }
+
+    private void refreshInBackground(Long userId) {
+        if (!refreshingUsers.add(userId)) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                refresh(userId);
+            } catch (RuntimeException ignored) {
+                // 旧快照仍可继续服务；下一次过期访问会再次尝试。
+            } finally {
+                refreshingUsers.remove(userId);
+            }
+        });
+    }
+
+    private CodeforcesOverview refreshNow(User user, String handle) {
+        Optional<List<CodeforcesApiService.CodeforcesSubmission>> submissionsResult =
+                codeforcesApiService.getUserSubmissions(handle, SUBMISSION_LIMIT);
+        Optional<List<CodeforcesApiService.CodeforcesRatingChange>> ratingResult =
+                codeforcesApiService.getUserRatingHistory(handle);
+        Optional<CodeforcesApiService.CodeforcesUserProfile> profileResult =
+                codeforcesApiService.getUserInfo(handle);
+
+        if (submissionsResult.isEmpty() || ratingResult.isEmpty()) {
+            throw new BusinessException(503, "Codeforces API is unavailable; please try again later");
+        }
+
+        List<CodeforcesApiService.CodeforcesSubmission> submissions = submissionsResult.get();
+        List<CodeforcesApiService.CodeforcesRatingChange> ratingChanges = ratingResult.get();
+        Map<String, CodeforcesApiService.CodeforcesSubmission> solvedProblems = new LinkedHashMap<>();
+        Set<String> attemptedProblems = new HashSet<>();
+        int acceptedSubmissionCount = 0;
+        Long lastSubmissionAt = null;
+
+        for (CodeforcesApiService.CodeforcesSubmission submission : submissions) {
+            if (submission.creationTimeSeconds() != null
+                    && (lastSubmissionAt == null || submission.creationTimeSeconds() > lastSubmissionAt)) {
+                lastSubmissionAt = submission.creationTimeSeconds();
+            }
+            String problemKey = submission.problemKey();
+            if (problemKey != null) {
+                attemptedProblems.add(problemKey);
+            }
+            if ("OK".equalsIgnoreCase(submission.verdict())) {
+                acceptedSubmissionCount++;
+                if (problemKey != null) {
+                    solvedProblems.putIfAbsent(problemKey, submission);
+                }
+            }
+        }
+
+        Map<String, Integer> tagCounts = new HashMap<>();
+        for (CodeforcesApiService.CodeforcesSubmission submission : solvedProblems.values()) {
+            for (String tag : submission.tags()) {
+                tagCounts.merge(tag, 1, Integer::sum);
+            }
+        }
+        List<CodeforcesOverview.TagStat> tagStats = tagCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(entry -> new CodeforcesOverview.TagStat(entry.getKey(), entry.getValue()))
+                .toList();
+
+        List<CodeforcesApiService.CodeforcesRatingChange> sortedChanges = new ArrayList<>(ratingChanges);
+        sortedChanges.sort(Comparator.comparing(
+                CodeforcesApiService.CodeforcesRatingChange::ratingUpdateTimeSeconds,
+                Comparator.nullsLast(Comparator.reverseOrder())
+        ));
+        List<CodeforcesOverview.RecentContest> recentContests = sortedChanges.stream()
+                .limit(RECENT_CONTEST_LIMIT)
+                .map(this::toRecentContest)
+                .toList();
+
+        Integer currentRating = profileResult.map(CodeforcesApiService.CodeforcesUserProfile::rating)
+                .orElseGet(() -> newestRating(sortedChanges, user.getCodeforcesRating()));
+        Integer maxRating = profileResult.map(CodeforcesApiService.CodeforcesUserProfile::maxRating)
+                .orElseGet(() -> maxRating(ratingChanges, user.getMaxRating()));
+        Instant syncedAt = Instant.now();
+        CodeforcesOverview overview = new CodeforcesOverview(
+                handle,
+                currentRating,
+                maxRating,
+                solvedProblems.size(),
+                attemptedProblems.size(),
+                acceptedSubmissionCount,
+                ratingChanges.size(),
+                lastSubmissionAt,
+                submissions.size() >= SUBMISSION_LIMIT,
+                syncedAt,
+                false,
+                tagStats,
+                recentContests
+        );
+
+        if (!java.util.Objects.equals(user.getCodeforcesRating(), currentRating)
+                || !java.util.Objects.equals(user.getMaxRating(), maxRating)) {
+            user.setCodeforcesRating(currentRating);
+            user.setMaxRating(maxRating);
+            userRepository.save(user);
+        }
+        snapshotRepository.save(user.getId(), handle, overview);
+        memoryCache.put(user.getId(), new CacheEntry(handle, overview, syncedAt));
+        return overview;
+    }
+
+    private CodeforcesOverview.RecentContest toRecentContest(
+            CodeforcesApiService.CodeforcesRatingChange change
+    ) {
+        Integer delta = change.oldRating() == null || change.newRating() == null
+                ? null
+                : change.newRating() - change.oldRating();
+        String url = change.contestId() == null
+                ? null
+                : "https://codeforces.com/contest/" + change.contestId();
+        return new CodeforcesOverview.RecentContest(
+                change.contestId(),
+                change.contestName(),
+                change.rank(),
+                change.oldRating(),
+                change.newRating(),
+                delta,
+                change.ratingUpdateTimeSeconds(),
+                url
+        );
+    }
+
+    private Integer newestRating(
+            List<CodeforcesApiService.CodeforcesRatingChange> sortedChanges,
+            Integer fallback
+    ) {
+        return sortedChanges.stream()
+                .map(CodeforcesApiService.CodeforcesRatingChange::newRating)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(fallback);
+    }
+
+    private Integer maxRating(
+            List<CodeforcesApiService.CodeforcesRatingChange> changes,
+            Integer fallback
+    ) {
+        return changes.stream()
+                .map(CodeforcesApiService.CodeforcesRatingChange::newRating)
+                .filter(java.util.Objects::nonNull)
+                .max(Integer::compareTo)
+                .map(value -> fallback == null ? value : Math.max(value, fallback))
+                .orElse(fallback);
+    }
+
+    private boolean isFresh(Instant syncedAt) {
+        return syncedAt != null && syncedAt.plus(cacheDuration).isAfter(Instant.now());
+    }
+
+    private User requireUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(404, "user not found: " + userId));
+    }
+
+    private String normalizeHandle(String handle) {
+        if (handle == null || handle.isBlank()) {
+            return null;
+        }
+        return handle.trim();
+    }
+
+    private CodeforcesOverview emptyOverview() {
+        return new CodeforcesOverview(
+                null, null, null, 0, 0, 0, 0, null,
+                false, null, false, List.of(), List.of()
+        );
+    }
+
+    private record CacheEntry(String handle, CodeforcesOverview overview, Instant syncedAt) {
+    }
+}

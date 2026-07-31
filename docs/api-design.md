@@ -65,15 +65,15 @@
 请求示例：
 ```json
 {
-  "username": "alice",
-  "email": "alice@example.com",
+  "username": "alice-account",
+  "displayName": "Alice",
   "password": "123456"
 }
 ```
 
 说明：
-- `username` 必须是有效 Codeforces handle（后端调用 `user.info` 校验）。
-- 可选字段：`codeforcesRating`, `maxRating`, `online`, `lastOnlineTimeSeconds`, `avatarUrl`。
+- `username` 是唯一登录账号，`displayName` 是对外展示的用户名。
+- 注册成功并登录后，通过独立绑定接口验证 Codeforces 账号所有权。
 
 ### 3.2 登录
 - `POST /api/auth/login`
@@ -103,7 +103,7 @@
 请求体：
 ```json
 {
-  "username": "new_handle",
+  "username": "new_username",
   "email": "new@example.com",
   "password": "newpass123",
   "displayName": "Alice",
@@ -115,12 +115,35 @@
 说明：
 - `password` 可不传或传空字符串（表示不修改密码）。非空密码长度需 `>= 6`。
 - `displayName` / `avatar` / `bio` 新增字段，可局部更新。
+- 修改 `username` 只修改站内登录名，不影响已绑定的 Codeforces Handle。
 
 ### 3.7 用户每日提交热图
 - `GET /api/users/{user_id}/daily-heatmap?days=180`
 - 返回：`[{date, score, colorLevel}]`
 - `colorLevel` 为 0-4，由得分相对强度自动计算。
 - 权限：本用户或管理员。
+
+### 3.8 开始绑定 Codeforces
+- `POST /api/users/{id}/codeforces-binding/start`
+- 权限：只能操作当前登录用户。
+
+请求体：
+```json
+{
+  "handle": "tourist"
+}
+```
+
+服务端记录验证开始时间。用户须在 2 分钟内使用该 Handle 向
+`https://codeforces.com/contest/1/problem/A` 提交一份产生
+`COMPILATION_ERROR` 的代码。
+
+### 3.9 完成 Codeforces 绑定
+- `POST /api/users/{id}/codeforces-binding/finish`
+- 权限：只能操作当前登录用户。
+
+服务端读取该 Handle 最近的提交；若发现验证开始后产生的 1A 编译错误提交，
+则保存绑定关系并同步 Codeforces rating、头像等资料。
 
 ## 4. 每日一题与练习题接口
 

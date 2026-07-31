@@ -15,6 +15,15 @@ export async function changeUserRole(userId, role) {
   return res.data;
 }
 
+export async function changeUserMemberType(userId, memberType) {
+  const res = await http.put(
+    `/api/admin/users/${userId}/member-type`,
+    { memberType },
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
 export async function regenerateDaily() {
   const res = await http.post(
     "/api/admin/daily-problem/regenerate",

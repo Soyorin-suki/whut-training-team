@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getHomeOverview } from "../api/home";
 import { getHeatmap } from "../api/user";
@@ -7,6 +7,8 @@ import ProblemCard from "../components/ui/ProblemCard";
 import Heatmap from "../components/ui/Heatmap";
 import UserAvatar from "../components/ui/UserAvatar";
 import { CardSkeleton } from "../components/ui/Skeleton";
+import { Activity, ArrowUpRight, Flame, Send, Trophy } from "lucide-react";
+import CodeforcesOverview from "../components/profile/CodeforcesOverview";
 
 function getTodayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -69,20 +71,46 @@ export default function HomePage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-semibold text-text-primary m-0">首页</h1>
+      <header className="dashboard-hero">
+        <div>
+          <p className="dashboard-eyebrow">/ DASHBOARD · {getTodayStr()}</p>
+          <h1>今天，也向前一步。</h1>
+          <p>专注训练，记录每一次提交与成长。</p>
+        </div>
+        <div className="dashboard-hero-aside">
+          <div className="dashboard-user-chip">
+            <UserAvatar user={user} size={56} />
+            <span>
+              <strong>{user?.displayName || user?.username || "训练者"}</strong>
+              <small>@{user?.username || "guest"}</small>
+            </span>
+          </div>
+          <Link to="/daily" className="dashboard-hero-action">
+            开始今日训练 <ArrowUpRight size={17} />
+          </Link>
+        </div>
+        <span className="dashboard-shape dashboard-shape-circle" aria-hidden="true" />
+        <span className="dashboard-shape dashboard-shape-square" aria-hidden="true" />
+      </header>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="活跃用户" value={totalUsers ?? 0} />
-        <StatCard label="今日打卡" value={dailySubmissionSummary?.todayCheckedInUsers ?? 0} />
-        <StatCard label="今日提交" value={dailySubmissionSummary?.todaySubmissions ?? 0} />
-        <StatCard label="我的积分" value={user?.totalPoints ?? 0} />
+        <StatCard icon={Activity} index="01" label="活跃用户" value={totalUsers ?? 0} />
+        <StatCard icon={Flame} index="02" label="今日打卡" value={dailySubmissionSummary?.todayCheckedInUsers ?? 0} />
+        <StatCard icon={Send} index="03" label="今日提交" value={dailySubmissionSummary?.todaySubmissions ?? 0} />
+        <StatCard icon={Trophy} index="04" label="我的积分" value={user?.totalPoints ?? 0} />
       </div>
+
+      <CodeforcesOverview
+        userId={user?.id}
+        handle={user?.codeforcesHandle}
+        compact
+      />
 
       {/* Heatmap */}
       <section>
         <h2 className="text-base font-semibold text-text-primary m-0 mb-2">打卡热力图</h2>
-        <div className="bg-white border border-border rounded-ui p-4 overflow-x-auto">
+        <div className="bg-white border border-border rounded-ui p-5 overflow-hidden">
           <Heatmap data={heatmapData} />
         </div>
       </section>
@@ -161,26 +189,30 @@ export default function HomePage() {
             {topUsers && topUsers.length > 0 ? (
               <div className="bg-white border border-border rounded-ui overflow-hidden">
                 {topUsers.map((item, idx) => (
-                  <div
+                  <Link
                     key={item.userId ?? item.id}
+                    to={`/members/${item.userId ?? item.id}`}
                     className={`flex items-center gap-3 px-4 py-2.5 ${
                       idx > 0 ? "border-t border-border" : ""
-                    }`}
+                    } no-underline hover:bg-bg-secondary transition-colors`}
                   >
                     <span className="text-xs text-text-secondary w-5 text-right font-mono">
                       {idx + 1}
                     </span>
                     <UserAvatar
-                      user={{ username: item.username, avatarUrl: item.avatarUrl }}
+                      user={{
+                        username: item.displayName || item.username,
+                        avatarUrl: item.avatarUrl,
+                      }}
                       size={24}
                     />
                     <span className="flex-1 text-sm text-text-primary truncate">
-                      {item.username}
+                      {item.displayName || item.username}
                     </span>
                     <span className="text-sm font-semibold text-text-primary">
                       {item.totalPoints ?? 0}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (
@@ -195,12 +227,16 @@ export default function HomePage() {
   );
 }
 
-function StatCard({ label, value, subtitle }) {
+function StatCard({ icon: Icon, index, label, value, subtitle }) {
   return (
-    <div className="bg-white border border-border rounded-ui px-4 py-3">
-      <p className="text-xs text-text-secondary m-0">{label}</p>
-      <p className="text-xl font-semibold text-text-primary m-0 mt-0.5">{value}</p>
-      {subtitle && <p className="text-[11px] text-text-secondary m-0">{subtitle}</p>}
+    <div className="stat-card">
+      <div className="stat-card-top">
+        <span>{index}</span>
+        <Icon size={17} strokeWidth={1.7} />
+      </div>
+      <p>{label}</p>
+      <strong>{value}</strong>
+      {subtitle && <small>{subtitle}</small>}
     </div>
   );
 }

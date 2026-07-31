@@ -2,13 +2,18 @@ package com.whut.training.controller;
 
 import com.whut.training.common.ApiResponse;
 import com.whut.training.context.UserContext;
+import com.whut.training.domain.dto.CodeforcesBindingResponse;
+import com.whut.training.domain.dto.CodeforcesBindingStartRequest;
+import com.whut.training.domain.dto.CodeforcesOverview;
 import com.whut.training.domain.dto.DailyHeatmapItem;
+import com.whut.training.domain.dto.PublicUserProfile;
 import com.whut.training.domain.dto.UserUpdateRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.DailyProblemRepository;
 import com.whut.training.service.UserService;
+import com.whut.training.service.CodeforcesProfileService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,21 +30,27 @@ public class UserController {
 
     private final UserService userService;
     private final DailyProblemRepository dailyProblemRepository;
+    private final CodeforcesProfileService codeforcesProfileService;
 
     /**
      * 创建用户控制器。
      *
      * @param userService 用户服务。
      */
-    public UserController(UserService userService, DailyProblemRepository dailyProblemRepository) {
+    public UserController(
+            UserService userService,
+            DailyProblemRepository dailyProblemRepository,
+            CodeforcesProfileService codeforcesProfileService
+    ) {
         this.userService = userService;
         this.dailyProblemRepository = dailyProblemRepository;
+        this.codeforcesProfileService = codeforcesProfileService;
     }
 
     /**
      * 注册新用户。
      *
-     * @param request 注册请求体，包含 Codeforces handle、邮箱和密码。
+     * @param request 注册请求体，包含站内用户名、邮箱和密码。
      * @return 注册成功后的用户信息。
      */
     @PostMapping("/register")
@@ -78,9 +89,41 @@ public class UserController {
     }
 
     /**
+     * 获取成员的安全公开资料。任意已登录成员均可访问。
+     */
+    @GetMapping("/{id}/public-profile")
+    public ApiResponse<PublicUserProfile> getPublicProfile(@PathVariable Long id) {
+        requireAuthenticated();
+        return ApiResponse.ok(PublicUserProfile.from(userService.getById(id)));
+    }
+
+    /**
+     * 获取成员的 Codeforces 统计快照。任意已登录成员均可访问。
+     */
+    @GetMapping("/{id}/codeforces-overview")
+    public ApiResponse<CodeforcesOverview> getCodeforcesOverview(@PathVariable Long id) {
+        requireAuthenticated();
+        return ApiResponse.ok(codeforcesProfileService.getOverview(id));
+    }
+
+    /**
+     * 强制刷新 Codeforces 统计。仅本人或管理员可执行。
+     */
+    @PostMapping("/{id}/codeforces-overview/refresh")
+    public ApiResponse<CodeforcesOverview> refreshCodeforcesOverview(@PathVariable Long id) {
+        User currentUser = requireAuthenticated();
+        boolean administrator = currentUser.getRole() == com.whut.training.domain.enums.UserRole.ADMIN
+                || currentUser.getRole() == com.whut.training.domain.enums.UserRole.SUPER_ADMIN;
+        if (!currentUser.getId().equals(id) && !administrator) {
+            throw new BusinessException(403, "forbidden");
+        }
+        return ApiResponse.ok(codeforcesProfileService.refresh(id));
+    }
+
+    /**
      * 修改当前登录用户资料。
      *
-     * <p>该接口允许修改用户名、邮箱和密码；用户名更新会触发 Codeforces 账号校验并同步统计数据。
+     * <p>该接口允许修改站内用户名、邮箱和密码；Codeforces 账号通过独立接口绑定。
      *
      * @param request 资料更新请求体，允许为空。
      * @return 更新后的用户信息。
@@ -96,6 +139,27 @@ public class UserController {
             throw new BusinessException(403, "forbidden");
         }
         return ApiResponse.ok(userService.updateProfile(id, request));
+    }
+
+    /**
+     * 为当前登录用户开始 Codeforces 账号所有权验证。
+     */
+    @PostMapping("/{id}/codeforces-binding/start")
+    public ApiResponse<CodeforcesBindingResponse> startCodeforcesBinding(
+            @PathVariable Long id,
+            @Valid @RequestBody CodeforcesBindingStartRequest request
+    ) {
+        requireSelf(id);
+        return ApiResponse.ok(userService.startCodeforcesBinding(id, request));
+    }
+
+    /**
+     * 查询验证提交并完成 Codeforces 账号绑定。
+     */
+    @PostMapping("/{id}/codeforces-binding/finish")
+    public ApiResponse<User> finishCodeforcesBinding(@PathVariable Long id) {
+        requireSelf(id);
+        return ApiResponse.ok(userService.finishCodeforcesBinding(id));
     }
 
     /**
@@ -117,5 +181,23 @@ public class UserController {
         if (days < 1) days = 180;
         if (days > 365) days = 365;
         return ApiResponse.ok(dailyProblemRepository.findHeatmapForUser(id, days));
+    }
+
+    private void requireSelf(Long id) {
+        User currentUser = UserContext.getCurrentUser();
+        if (currentUser == null) {
+            throw new BusinessException(401, "unauthorized");
+        }
+        if (!currentUser.getId().equals(id)) {
+            throw new BusinessException(403, "you can only bind Codeforces for your own account");
+        }
+    }
+
+    private User requireAuthenticated() {
+        User currentUser = UserContext.getCurrentUser();
+        if (currentUser == null) {
+            throw new BusinessException(401, "unauthorized");
+        }
+        return currentUser;
     }
 }

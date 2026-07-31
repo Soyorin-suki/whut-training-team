@@ -60,9 +60,15 @@ public class SqliteInitializer implements DatabaseInitializer {
                     is_online INTEGER,
                     last_online_time_seconds INTEGER,
                     avatar_url TEXT,
+                    avatar_customized INTEGER NOT NULL DEFAULT 0,
                     total_points INTEGER DEFAULT 0,
                     display_name TEXT,
-                    bio TEXT
+                    bio TEXT,
+                    codeforces_handle TEXT,
+                    pending_codeforces_handle TEXT,
+                    codeforces_binding_started_at_seconds INTEGER,
+                    member_type TEXT NOT NULL DEFAULT 'REGULAR',
+                    show_problem_tags INTEGER NOT NULL DEFAULT 1
                 )
                 """);
         ensureColumnExists("users", "uid", "INTEGER");
@@ -71,9 +77,32 @@ public class SqliteInitializer implements DatabaseInitializer {
         ensureColumnExists("users", "is_online", "INTEGER");
         ensureColumnExists("users", "last_online_time_seconds", "INTEGER");
         ensureColumnExists("users", "avatar_url", "TEXT");
+        ensureColumnExists("users", "avatar_customized", "INTEGER NOT NULL DEFAULT 0");
         ensureColumnExists("users", "total_points", "INTEGER DEFAULT 0");
         ensureColumnExists("users", "display_name", "TEXT");
         ensureColumnExists("users", "bio", "TEXT");
+        ensureColumnExists("users", "codeforces_handle", "TEXT");
+        ensureColumnExists("users", "pending_codeforces_handle", "TEXT");
+        ensureColumnExists("users", "codeforces_binding_started_at_seconds", "INTEGER");
+        ensureColumnExists("users", "member_type", "TEXT NOT NULL DEFAULT 'REGULAR'");
+        ensureColumnExists("users", "show_problem_tags", "INTEGER NOT NULL DEFAULT 1");
+
+        // 旧版本把站内用户名直接当作 CF Handle。仅迁移已有 CF 资料的账号，
+        // 避免把 superadmin 等纯站内账号误标记为已绑定。
+        jdbcTemplate.update("""
+                UPDATE users
+                SET codeforces_handle = username
+                WHERE codeforces_handle IS NULL
+                  AND (uid IS NOT NULL
+                    OR codeforces_rating IS NOT NULL
+                    OR max_rating IS NOT NULL
+                    OR avatar_url IS NOT NULL)
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_codeforces_handle
+                ON users(codeforces_handle COLLATE NOCASE)
+                WHERE codeforces_handle IS NOT NULL
+                """);
 
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS cf_problem (
@@ -240,6 +269,19 @@ public class SqliteInitializer implements DatabaseInitializer {
                     to_role TEXT NOT NULL,
                     changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS cf_profile_snapshot (
+                    user_id INTEGER PRIMARY KEY,
+                    codeforces_handle TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    synced_at TEXT NOT NULL
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cf_profile_snapshot_handle
+                ON cf_profile_snapshot(codeforces_handle)
                 """);
 
         // 数据迁移：将已推送但状态仍为 APPROVED 的历史题目标记为 PUBLISHED

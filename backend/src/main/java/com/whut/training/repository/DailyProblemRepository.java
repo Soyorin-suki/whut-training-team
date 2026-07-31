@@ -523,6 +523,7 @@ public class DailyProblemRepository {
                                p.problem_key,
                                p.name,
                                p.rating,
+                               p.tags,
                                p.source_url,
                                p.is_redrawn,
                                CASE
@@ -541,7 +542,7 @@ public class DailyProblemRepository {
                                    ELSE NULL
                                END AS score
                         FROM (
-                            SELECT date, slot, problem_key, name, rating, source_url, is_redrawn
+                            SELECT date, slot, problem_key, name, rating, tags, source_url, is_redrawn
                             FROM daily_problem_slot
                             WHERE date BETWEEN ? AND ?
                             UNION ALL
@@ -550,6 +551,7 @@ public class DailyProblemRepository {
                                    d.problem_key,
                                    d.name,
                                    d.rating,
+                                   d.tags,
                                    d.source_url,
                                    0 AS is_redrawn
                             FROM daily_problem d
@@ -571,6 +573,7 @@ public class DailyProblemRepository {
                         rs.getString("problem_key"),
                         rs.getString("name"),
                         (Integer) rs.getObject("rating"),
+                        rs.getString("tags"),
                         rs.getString("source_url"),
                         rs.getInt("is_redrawn") != 0,
                         rs.getObject("submission_id") != null,

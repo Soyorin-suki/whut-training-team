@@ -63,7 +63,7 @@ export default function LeaderboardPage() {
           {items.map((item, idx) => (
             <Link
               key={item.userId}
-              to={`/profile/${item.userId}`}
+              to={`/members/${item.userId}`}
               className={`flex items-center gap-3 px-4 py-3 hover:bg-bg-secondary transition-colors no-underline ${
                 idx > 0 ? "border-t border-border" : ""
               }`}
@@ -72,11 +72,14 @@ export default function LeaderboardPage() {
                 {(page - 1) * PAGE_SIZE + idx + 1}
               </span>
               <UserAvatar
-                user={{ username: item.username, avatarUrl: item.avatarUrl }}
+                user={{
+                  username: item.displayName || item.username,
+                  avatarUrl: item.avatarUrl,
+                }}
                 size={32}
               />
               <span className="flex-1 text-sm text-text-primary font-medium truncate">
-                {item.username}
+                {item.displayName || item.username}
               </span>
               <span className="text-sm font-semibold text-text-primary flex-shrink-0">
                 {item.totalPoints ?? 0} 分

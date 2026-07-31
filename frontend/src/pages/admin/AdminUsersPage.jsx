@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { listUsers } from "../../api/user";
-import { adminCreateUser, changeUserRole, getRoles } from "../../api/admin";
+import {
+  adminCreateUser,
+  changeUserMemberType,
+  changeUserRole,
+  getRoles,
+} from "../../api/admin";
 import { useAuth } from "../../context/AuthContext";
 import UserAvatar from "../../components/ui/UserAvatar";
 import { ListSkeleton } from "../../components/ui/Skeleton";
@@ -85,6 +90,20 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleChangeMemberType(userId, memberType) {
+    try {
+      const resp = await changeUserMemberType(userId, memberType);
+      if (resp.code === 200) {
+        setMessage("成员身份已更新");
+        loadUsers();
+      } else {
+        setMessage(resp.message || "操作失败");
+      }
+    } catch {
+      setMessage("请求失败");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -114,6 +133,7 @@ export default function AdminUsersPage() {
                   <th className="text-left px-4 py-2.5 font-medium text-text-secondary">用户</th>
                   <th className="text-left px-4 py-2.5 font-medium text-text-secondary">邮箱</th>
                   <th className="text-left px-4 py-2.5 font-medium text-text-secondary">角色</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-text-secondary">成员身份</th>
                   <th className="text-right px-4 py-2.5 font-medium text-text-secondary">积分</th>
                   {isSuperAdmin && (
                     <th className="text-right px-4 py-2.5 font-medium text-text-secondary">操作</th>
@@ -138,6 +158,12 @@ export default function AdminUsersPage() {
                       }`}>
                         {u.role || "USER"}
                       </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <MemberTypeSelect
+                        currentMemberType={u.memberType || "REGULAR"}
+                        onChange={(memberType) => handleChangeMemberType(u.id, memberType)}
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-right font-medium">{u.totalPoints ?? 0}</td>
                     {isSuperAdmin && (
@@ -192,6 +218,23 @@ export default function AdminUsersPage() {
         </Dialog.Portal>
       </Dialog.Root>
     </div>
+  );
+}
+
+function MemberTypeSelect({ currentMemberType, onChange }) {
+  return (
+    <select
+      className={`text-xs px-2 py-1 border rounded bg-white cursor-pointer ${
+        currentMemberType === "ACTIVE_TEAM"
+          ? "border-[#9be9a8] text-[#216e39]"
+          : "border-border text-text-secondary"
+      }`}
+      value={currentMemberType}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="REGULAR">普通成员</option>
+      <option value="ACTIVE_TEAM">现役队员</option>
+    </select>
   );
 }
 

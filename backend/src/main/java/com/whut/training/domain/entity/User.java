@@ -1,6 +1,7 @@
 package com.whut.training.domain.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.whut.training.domain.enums.MemberType;
 import com.whut.training.domain.enums.UserRole;
 
 /**
@@ -21,9 +22,15 @@ public class User {
     private Boolean online;
     private Long lastOnlineTimeSeconds;
     private String avatarUrl;
+    private Boolean avatarCustomized;
     private Integer totalPoints;
     private String displayName;
     private String bio;
+    private String codeforcesHandle;
+    private String pendingCodeforcesHandle;
+    private Long codeforcesBindingStartedAtSeconds;
+    private MemberType memberType = MemberType.REGULAR;
+    private Boolean showProblemTags = true;
 
     /**
      * 无参构造器，供反射或框架映射使用。
@@ -306,6 +313,14 @@ public class User {
         this.avatarUrl = avatarUrl;
     }
 
+    public Boolean getAvatarCustomized() {
+        return avatarCustomized;
+    }
+
+    public void setAvatarCustomized(Boolean avatarCustomized) {
+        this.avatarCustomized = avatarCustomized;
+    }
+
     /**
      * 获取用户总积分（每日一题累计）。
      *
@@ -338,5 +353,49 @@ public class User {
 
     public void setBio(String bio) {
         this.bio = bio;
+    }
+
+    public String getCodeforcesHandle() {
+        return codeforcesHandle;
+    }
+
+    public void setCodeforcesHandle(String codeforcesHandle) {
+        this.codeforcesHandle = codeforcesHandle;
+    }
+
+    public String getPendingCodeforcesHandle() {
+        return pendingCodeforcesHandle;
+    }
+
+    public void setPendingCodeforcesHandle(String pendingCodeforcesHandle) {
+        this.pendingCodeforcesHandle = pendingCodeforcesHandle;
+    }
+
+    public Long getCodeforcesBindingStartedAtSeconds() {
+        return codeforcesBindingStartedAtSeconds;
+    }
+
+    public void setCodeforcesBindingStartedAtSeconds(Long codeforcesBindingStartedAtSeconds) {
+        this.codeforcesBindingStartedAtSeconds = codeforcesBindingStartedAtSeconds;
+    }
+
+    public boolean isCodeforcesBound() {
+        return codeforcesHandle != null && !codeforcesHandle.isBlank();
+    }
+
+    public MemberType getMemberType() {
+        return memberType;
+    }
+
+    public void setMemberType(MemberType memberType) {
+        this.memberType = memberType;
+    }
+
+    public Boolean getShowProblemTags() {
+        return showProblemTags;
+    }
+
+    public void setShowProblemTags(Boolean showProblemTags) {
+        this.showProblemTags = showProblemTags;
     }
 }

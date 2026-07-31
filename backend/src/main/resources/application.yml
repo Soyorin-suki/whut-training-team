@@ -10,6 +10,11 @@ spring:
 
 codeforces:
   base_url: https://codeforces.com/api
+  profile-cache-minutes: 30
+
+atcoder:
+  contests-url: https://atcoder.jp/contests/?lang=en
+  cache-minutes: 15
 
 push:
   defaultAutoApprove: false

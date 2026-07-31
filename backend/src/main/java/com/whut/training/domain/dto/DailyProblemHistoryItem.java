@@ -8,6 +8,7 @@ package com.whut.training.domain.dto;
  * @param problemKey   题目唯一键。
  * @param name         题目标题。
  * @param rating       难度。
+ * @param tags         题目标签。
  * @param sourceUrl    题目链接。
  * @param isRedrawn    是否已被重抽。
  * @param checkedIn    是否已打卡。
@@ -21,6 +22,7 @@ public record DailyProblemHistoryItem(
         String problemKey,
         String name,
         Integer rating,
+        String tags,
         String sourceUrl,
         boolean isRedrawn,
         boolean checkedIn,

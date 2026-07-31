@@ -57,7 +57,7 @@ whut-training-team
 
 | 模块 | 说明 |
 | --- | --- |
-| 用户系统 | 注册（CF handle 校验）、登录、token 刷新/注销、资料修改（昵称/头像/简介）、三级权限 |
+| 用户系统 | 登录账号与展示用户名分离、Codeforces 所有权验证绑定、token 刷新/注销、资料修改、三级权限 |
 | 每日一题 | 每日两题（easy/hard），rating 阈值分割，打卡校验（Codeforces 提交），积分 = 题目 rating，支持管理员重生成/重抽 |
 | 排行榜 | 按总积分排序，支持分页，平局按最后打卡时间 |
 | 自主练习 | 按 rating 范围随机抽题，提交校验（不计分），支持历史记录查看与删除 |
@@ -91,6 +91,7 @@ npm run dev
 ## 注意事项
 
 - **首次使用请先注册账号**（注册即获得 `USER` 角色）
+- **绑定 Codeforces**：登录后进入个人中心，输入 Handle，并在 2 分钟内向 Codeforces 1A 提交一次编译错误以完成所有权验证
 - **提升权限**：使用 SUPER_ADMIN 账号登录，在管理面板中修改目标用户的角色
 - **SUPER_ADMIN 账密**：在 `backend/src/main/resources/application.yml` 的 `superAdmin` 配置项中
 - 系统首次启动时会自动创建 SUPER_ADMIN 账号（若不存在），不创建普通 ADMIN

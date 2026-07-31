@@ -312,7 +312,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
         <section className="content-area">
           <header className="content-topbar">
             <div className="content-header">
-              <h1>WHUT Training</h1>
+              <h1>WHUT-ACM</h1>
               <p>请先登录后使用系统功能。</p>
             </div>
             <div className="guest-actions">
@@ -332,7 +332,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
   return (
     <main className="main-layout">
       <aside className="sidebar">
-        <div className="sidebar-brand">WHUT Training</div>
+        <div className="sidebar-brand">WHUT-ACM</div>
         <nav className="sidebar-nav">
           {NAV_ITEMS.map((item) => (
             <button

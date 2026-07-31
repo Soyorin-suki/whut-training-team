@@ -171,6 +171,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public CheckInResultResponse checkIn(User user, Long submissionId) {
+        String codeforcesHandle = requireCodeforcesHandle(user);
         LocalDate today = timeProvider.today();
         // support multi-slot daily: try to find matching slot (easy/hard) first
         ensureDailySlots(today, false, "api");
@@ -188,7 +189,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             // try to match submission to one of the non-redrawn slots
             for (com.whut.training.domain.entity.DailyProblemSlot slot : activeSlots) {
                 try {
-                    submissionStatus = verifySubmission(user.getUsername(), submissionId, slot.contestId(), slot.problemIndex());
+                    submissionStatus = verifySubmission(codeforcesHandle, submissionId, slot.contestId(), slot.problemIndex());
                     matchedSlot = slot;
                     break;
                 } catch (BusinessException ex) {
@@ -203,7 +204,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 : null;
         if (matchedSlot == null && single != null) {
             try {
-                submissionStatus = verifySubmission(user.getUsername(), submissionId, single.contestId(), single.problemIndex());
+                submissionStatus = verifySubmission(codeforcesHandle, submissionId, single.contestId(), single.problemIndex());
                 if (!"OK".equalsIgnoreCase(submissionStatus.verdict())) {
                     throw new BusinessException(400, "提交未通过，判题结果为 " + submissionStatus.verdict());
                 }
@@ -220,11 +221,13 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             throw new BusinessException(400, "submission is not accepted, verdict=" + submissionStatus.verdict());
         }
 
-        int newScore = 0;
+        final int newScore;
         if (matchedSlot != null) {
             newScore = matchedSlot.rating() == null ? 0 : matchedSlot.rating();
         } else if (single != null) {
             newScore = single.rating() == null ? 0 : single.rating();
+        } else {
+            newScore = 0;
         }
 
         Object userLock = userCheckinLocks.computeIfAbsent(user.getId(), k -> new Object());
@@ -336,11 +339,12 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public CheckInResultResponse checkPractice(User user, Long drawId, Long submissionId) {
+        String codeforcesHandle = requireCodeforcesHandle(user);
         UserPracticeDraw draw = dailyProblemRepository.findPracticeDrawById(drawId, user.getId())
                 .orElseThrow(() -> new BusinessException(404, "practice draw not found"));
 
         CodeforcesApiService.SubmissionStatus submissionStatus = verifySubmission(
-                user.getUsername(),
+                codeforcesHandle,
                 submissionId,
                 draw.contestId(),
                 draw.problemIndex()
@@ -348,6 +352,13 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         dailyProblemRepository.updatePracticeCheck(drawId, user.getId(), submissionId, submissionStatus.verdict());
         boolean accepted = "OK".equalsIgnoreCase(submissionStatus.verdict());
         return new CheckInResultResponse("PRACTICE", accepted, submissionId, submissionStatus.verdict(), 0);
+    }
+
+    private String requireCodeforcesHandle(User user) {
+        if (user == null || user.getCodeforcesHandle() == null || user.getCodeforcesHandle().isBlank()) {
+            throw new BusinessException(400, "please bind your Codeforces account first");
+        }
+        return user.getCodeforcesHandle();
     }
 
     @Override

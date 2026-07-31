@@ -30,3 +30,44 @@ export async function getHeatmap(userId, days = 180) {
   });
   return res.data;
 }
+
+export async function getPublicProfile(id) {
+  const res = await http.get(`/api/users/${id}/public-profile`, {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+export async function getCodeforcesOverview(id) {
+  const res = await http.get(`/api/users/${id}/codeforces-overview`, {
+    headers: authHeaders(),
+  });
+  return res.data;
+}
+
+export async function refreshCodeforcesOverview(id) {
+  const res = await http.post(
+    `/api/users/${id}/codeforces-overview/refresh`,
+    {},
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function startCodeforcesBinding(userId, handle) {
+  const res = await http.post(
+    `/api/users/${userId}/codeforces-binding/start`,
+    { handle },
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function finishCodeforcesBinding(userId) {
+  const res = await http.post(
+    `/api/users/${userId}/codeforces-binding/finish`,
+    {},
+    { headers: authHeaders() }
+  );
+  return res.data;
+}

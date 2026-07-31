@@ -4,6 +4,7 @@ import com.whut.training.common.ApiResponse;
 import com.whut.training.context.UserContext;
 import com.whut.training.domain.dto.AdminCreateUserRequest;
 import com.whut.training.domain.entity.User;
+import com.whut.training.domain.enums.MemberType;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.UserRepository;
@@ -63,6 +64,34 @@ public class AdminUserController {
         String fromRole = target.getRole() == null ? null : target.getRole().name();
         userRepository.updateRole(id, targetRole.name());
         userRepository.insertRoleChangeLog(id, currentUser.getId(), fromRole, targetRole.name());
+        return ApiResponse.ok(userService.getById(id));
+    }
+
+    /**
+     * 管理员修改训练队成员类型。
+     */
+    @PutMapping("/{id}/member-type")
+    public ApiResponse<User> changeMemberType(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        User currentUser = UserContext.getCurrentUser();
+        if (currentUser == null
+                || (currentUser.getRole() != UserRole.ADMIN && currentUser.getRole() != UserRole.SUPER_ADMIN)) {
+            throw new BusinessException(403, "admin role required");
+        }
+
+        String rawMemberType = body.get("memberType");
+        if (rawMemberType == null || rawMemberType.isBlank()) {
+            throw new BusinessException(400, "memberType is required");
+        }
+
+        MemberType memberType;
+        try {
+            memberType = MemberType.valueOf(rawMemberType.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(400, "invalid member type: " + rawMemberType);
+        }
+
+        userService.getById(id);
+        userRepository.updateMemberType(id, memberType);
         return ApiResponse.ok(userService.getById(id));
     }
 }

@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Codeforces 外部 API 客户端。
@@ -30,11 +31,15 @@ import java.util.Optional;
 @ServiceLog
 public class CodeforcesApiService {
 
+    private static final long MIN_REQUEST_INTERVAL_NANOS = Duration.ofMillis(2100).toNanos();
+
     private final String baseUrl;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Object requestRateLock = new Object();
+    private long nextRequestAllowedAtNanos;
 
     /**
      * 创建 Codeforces API 服务。
@@ -65,7 +70,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithRateLimit(request);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -110,7 +115,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithRateLimit(request);
             if (response.statusCode() != 200) {
                 return List.of();
             }
@@ -199,7 +204,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithRateLimit(request);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -240,6 +245,178 @@ public class CodeforcesApiService {
         } catch (Exception ex) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * 检查指定 Handle 是否在验证开始后向 Codeforces 1A 提交过编译错误。
+     *
+     * <p>返回 empty 表示 Codeforces API 当前不可用；返回 false 表示 API 请求成功，
+     * 但没有找到符合条件的提交。
+     *
+     * @param handle         Codeforces Handle。
+     * @param startedAtSeconds 验证开始时间（Unix 秒）。
+     * @return 是否找到所有权验证提交。
+     */
+    public Optional<Boolean> hasOwnershipVerificationSubmission(String handle, long startedAtSeconds) {
+        if (handle == null || handle.isBlank()) {
+            return Optional.of(false);
+        }
+
+        String encodedHandle = URLEncoder.encode(handle.trim(), StandardCharsets.UTF_8);
+        String url = baseUrl + "/user.status?handle=" + encodedHandle + "&from=1&count=30";
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .timeout(Duration.ofSeconds(8))
+                .build();
+
+        try {
+            HttpResponse<String> response = sendWithRateLimit(request);
+            if (response.statusCode() != 200) {
+                return Optional.empty();
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            if (!"OK".equalsIgnoreCase(root.path("status").asText())) {
+                return Optional.empty();
+            }
+            JsonNode result = root.path("result");
+            if (!result.isArray()) {
+                return Optional.empty();
+            }
+
+            for (JsonNode row : result) {
+                Long creationTimeSeconds = nullableLong(row, "creationTimeSeconds");
+                if (creationTimeSeconds == null || creationTimeSeconds < startedAtSeconds) {
+                    continue;
+                }
+                JsonNode problem = row.path("problem");
+                Integer contestId = nullableInt(problem, "contestId");
+                String index = nullableText(problem, "index");
+                String verdict = nullableText(row, "verdict");
+                if (Integer.valueOf(1).equals(contestId)
+                        && "A".equalsIgnoreCase(index)
+                        && "COMPILATION_ERROR".equalsIgnoreCase(verdict)) {
+                    return Optional.of(true);
+                }
+            }
+            return Optional.of(false);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 获取用户最近提交。empty 表示 API 不可用，空列表表示请求成功但没有提交。
+     */
+    public Optional<List<CodeforcesSubmission>> getUserSubmissions(String handle, int count) {
+        if (handle == null || handle.isBlank()) {
+            return Optional.of(List.of());
+        }
+        int safeCount = Math.max(1, Math.min(count, 10000));
+        String encodedHandle = URLEncoder.encode(handle.trim(), StandardCharsets.UTF_8);
+        String url = baseUrl + "/user.status?handle=" + encodedHandle + "&from=1&count=" + safeCount;
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .timeout(Duration.ofSeconds(12))
+                .build();
+
+        try {
+            HttpResponse<String> response = sendWithRateLimit(request);
+            if (response.statusCode() != 200) {
+                return Optional.empty();
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode result = root.path("result");
+            if (!"OK".equalsIgnoreCase(root.path("status").asText()) || !result.isArray()) {
+                return Optional.empty();
+            }
+
+            List<CodeforcesSubmission> submissions = new ArrayList<>();
+            for (JsonNode row : result) {
+                JsonNode problem = row.path("problem");
+                submissions.add(new CodeforcesSubmission(
+                        nullableLong(row, "id"),
+                        nullableInt(problem, "contestId"),
+                        nullableText(problem, "index"),
+                        nullableText(problem, "name"),
+                        nullableInt(problem, "rating"),
+                        readTagList(problem.path("tags")),
+                        nullableText(row, "verdict"),
+                        nullableLong(row, "creationTimeSeconds")
+                ));
+            }
+            return Optional.of(submissions);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 获取用户全部 rated 比赛 rating 变化记录。
+     */
+    public Optional<List<CodeforcesRatingChange>> getUserRatingHistory(String handle) {
+        if (handle == null || handle.isBlank()) {
+            return Optional.of(List.of());
+        }
+        String encodedHandle = URLEncoder.encode(handle.trim(), StandardCharsets.UTF_8);
+        String url = baseUrl + "/user.rating?handle=" + encodedHandle;
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .timeout(Duration.ofSeconds(10))
+                .build();
+
+        try {
+            HttpResponse<String> response = sendWithRateLimit(request);
+            if (response.statusCode() != 200) {
+                return Optional.empty();
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode result = root.path("result");
+            if (!"OK".equalsIgnoreCase(root.path("status").asText()) || !result.isArray()) {
+                return Optional.empty();
+            }
+
+            List<CodeforcesRatingChange> changes = new ArrayList<>();
+            for (JsonNode row : result) {
+                changes.add(new CodeforcesRatingChange(
+                        nullableLong(row, "contestId"),
+                        nullableText(row, "contestName"),
+                        nullableInt(row, "rank"),
+                        nullableInt(row, "oldRating"),
+                        nullableInt(row, "newRating"),
+                        nullableLong(row, "ratingUpdateTimeSeconds")
+                ));
+            }
+            return Optional.of(changes);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 所有 Codeforces 请求共用启动间隔限制，避免不同业务并发触发官方限流。
+     */
+    private HttpResponse<String> sendWithRateLimit(HttpRequest request)
+            throws java.io.IOException, InterruptedException {
+        synchronized (requestRateLock) {
+            long waitNanos = nextRequestAllowedAtNanos - System.nanoTime();
+            if (waitNanos > 0) {
+                TimeUnit.NANOSECONDS.sleep(waitNanos);
+            }
+            nextRequestAllowedAtNanos = System.nanoTime() + MIN_REQUEST_INTERVAL_NANOS;
+        }
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     /**
@@ -301,8 +478,12 @@ public class CodeforcesApiService {
      * @return 标签字符串。
      */
     private String readTags(JsonNode tagsNode) {
+        return String.join(",", readTagList(tagsNode));
+    }
+
+    private List<String> readTagList(JsonNode tagsNode) {
         if (!tagsNode.isArray()) {
-            return "";
+            return List.of();
         }
         List<String> tags = new ArrayList<>();
         for (JsonNode tagNode : tagsNode) {
@@ -311,7 +492,7 @@ public class CodeforcesApiService {
                 tags.add(tag);
             }
         }
-        return String.join(",", tags);
+        return tags;
     }
 
     /**
@@ -349,5 +530,36 @@ public class CodeforcesApiService {
      */
     public record SubmissionStatus(Long submissionId, Integer contestId, String problemIndex, String verdict,
                                    Instant creationTime) {
+    }
+
+    public record CodeforcesSubmission(
+            Long id,
+            Integer contestId,
+            String problemIndex,
+            String problemName,
+            Integer rating,
+            List<String> tags,
+            String verdict,
+            Long creationTimeSeconds
+    ) {
+        public String problemKey() {
+            if (contestId != null && problemIndex != null) {
+                return contestId + "-" + problemIndex;
+            }
+            if (problemName != null && problemIndex != null) {
+                return problemName + "-" + problemIndex;
+            }
+            return null;
+        }
+    }
+
+    public record CodeforcesRatingChange(
+            Long contestId,
+            String contestName,
+            Integer rank,
+            Integer oldRating,
+            Integer newRating,
+            Long ratingUpdateTimeSeconds
+    ) {
     }
 }

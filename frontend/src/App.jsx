@@ -5,10 +5,12 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import HomePage from "./pages/HomePage";
 import DailyProblemPage from "./pages/DailyProblemPage";
+import ContestsPage from "./pages/ContestsPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import PracticePage from "./pages/PracticePage";
 import PushPage from "./pages/PushPage";
 import ProfilePage from "./pages/ProfilePage";
+import MemberProfilePage from "./pages/MemberProfilePage";
 import AdminDailyPage from "./pages/admin/AdminDailyPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminPushPage from "./pages/admin/AdminPushPage";
@@ -60,10 +62,12 @@ export default function App() {
       <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
         <Route path="/" element={<HomePage />} />
         <Route path="/daily" element={<DailyProblemPage />} />
+        <Route path="/contests" element={<ContestsPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/practice" element={<PracticePage />} />
         <Route path="/push" element={<PushPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/members/:id" element={<MemberProfilePage />} />
 
         {/* Admin routes */}
         <Route path="/admin/daily" element={<AdminGuard><AdminDailyPage /></AdminGuard>} />

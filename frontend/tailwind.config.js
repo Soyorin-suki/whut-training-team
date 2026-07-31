@@ -8,24 +8,24 @@ export default {
     extend: {
       colors: {
         'bg-primary': '#FFFFFF',
-        'bg-secondary': '#F6F8FA',
-        'text-primary': '#24292F',
-        'text-secondary': '#57606A',
-        'success': '#2DA44E',
+        'bg-secondary': '#F4F4F0',
+        'text-primary': '#111111',
+        'text-secondary': '#6F6F69',
+        'success': '#365A3A',
         'warning': '#D29922',
         'error': '#CF222E',
-        'border': '#d0d7de',
-        'hover': '#e8eaed',
-        'active': '#d0d7de',
+        'border': '#D9D9D3',
+        'hover': '#EAEAE5',
+        'active': '#D2D2CC',
       },
       borderRadius: {
-        'ui': '8px',
+        'ui': '14px',
       },
       maxWidth: {
-        'page': '1400px',
+        'page': '1540px',
       },
       spacing: {
-        'page': '24px',
+        'page': '32px',
       },
       fontSize: {
         'nav': '14px',

@@ -2,6 +2,7 @@ package com.whut.training.repository;
 
 import com.whut.training.domain.dto.LeaderboardItem;
 import com.whut.training.domain.entity.User;
+import com.whut.training.domain.enums.MemberType;
 import com.whut.training.domain.enums.UserRole;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -17,7 +18,8 @@ public class UserRepository {
     private final JdbcTemplate jdbcTemplate;
 
     private static final String SELECT_COLUMNS =
-            "id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, total_points, display_name, bio";
+            "id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, avatar_customized, total_points, display_name, bio, " +
+                    "codeforces_handle, pending_codeforces_handle, codeforces_binding_started_at_seconds, member_type, show_problem_tags";
 
     private final RowMapper<User> userRowMapperWithPoints = (rs, rowNum) -> {
         User u = new User(
@@ -46,6 +48,12 @@ public class UserRepository {
         }
         u.setDisplayName(rs.getString("display_name"));
         u.setBio(rs.getString("bio"));
+        u.setAvatarCustomized(parseOnline(rs.getObject("avatar_customized")));
+        u.setCodeforcesHandle(rs.getString("codeforces_handle"));
+        u.setPendingCodeforcesHandle(rs.getString("pending_codeforces_handle"));
+        u.setCodeforcesBindingStartedAtSeconds(parseLongValue(rs.getObject("codeforces_binding_started_at_seconds")));
+        u.setMemberType(parseMemberType(rs.getString("member_type")));
+        u.setShowProblemTags(parseBooleanValue(rs.getObject("show_problem_tags"), true));
         return u;
     };
 
@@ -56,7 +64,7 @@ public class UserRepository {
     public User save(User user) {
         if (user.getId() == null) {
             jdbcTemplate.update(
-                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, total_points, display_name, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, avatar_customized, total_points, display_name, bio, codeforces_handle, pending_codeforces_handle, codeforces_binding_started_at_seconds, member_type, show_problem_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     user.getUsername(),
                     user.getEmail(),
                     user.getPassword(),
@@ -67,9 +75,15 @@ public class UserRepository {
                     user.getOnline(),
                     user.getLastOnlineTimeSeconds(),
                     user.getAvatarUrl(),
+                    Boolean.TRUE.equals(user.getAvatarCustomized()),
                     user.getTotalPoints() == null ? 0 : user.getTotalPoints(),
                     user.getDisplayName(),
-                    user.getBio()
+                    user.getBio(),
+                    user.getCodeforcesHandle(),
+                    user.getPendingCodeforcesHandle(),
+                    user.getCodeforcesBindingStartedAtSeconds(),
+                    user.getMemberType() == null ? MemberType.REGULAR.name() : user.getMemberType().name(),
+                    !Boolean.FALSE.equals(user.getShowProblemTags())
             );
             Long id = jdbcTemplate.queryForObject(
                     "SELECT id FROM users WHERE username = ?",
@@ -81,7 +95,7 @@ public class UserRepository {
         }
 
         jdbcTemplate.update(
-                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, total_points = ?, display_name = ?, bio = ? WHERE id = ?",
+                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, avatar_customized = ?, total_points = ?, display_name = ?, bio = ?, codeforces_handle = ?, pending_codeforces_handle = ?, codeforces_binding_started_at_seconds = ?, member_type = ?, show_problem_tags = ? WHERE id = ?",
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
@@ -92,9 +106,15 @@ public class UserRepository {
                 user.getOnline(),
                 user.getLastOnlineTimeSeconds(),
                 user.getAvatarUrl(),
+                Boolean.TRUE.equals(user.getAvatarCustomized()),
                 user.getTotalPoints() == null ? 0 : user.getTotalPoints(),
                 user.getDisplayName(),
                 user.getBio(),
+                user.getCodeforcesHandle(),
+                user.getPendingCodeforcesHandle(),
+                user.getCodeforcesBindingStartedAtSeconds(),
+                user.getMemberType() == null ? MemberType.REGULAR.name() : user.getMemberType().name(),
+                !Boolean.FALSE.equals(user.getShowProblemTags()),
                 user.getId()
         );
         return user;
@@ -143,6 +163,18 @@ public class UserRepository {
         return count != null && count > 0;
     }
 
+    public Optional<User> findByCodeforcesHandle(String handle) {
+        if (handle == null || handle.isBlank()) {
+            return Optional.empty();
+        }
+        List<User> users = jdbcTemplate.query(
+                "SELECT " + SELECT_COLUMNS + " FROM users WHERE LOWER(codeforces_handle) = LOWER(?)",
+                userRowMapperWithPoints,
+                handle.trim()
+        );
+        return users.stream().findFirst();
+    }
+
     public int countTotal() {
         Integer c = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM users", Integer.class);
         return c == null ? 0 : c;
@@ -153,6 +185,8 @@ public class UserRepository {
             LeaderboardItem it = new LeaderboardItem();
             it.setUserId(rs.getLong("id"));
             it.setUsername(rs.getString("username"));
+            it.setDisplayName(rs.getString("display_name"));
+            it.setAvatarUrl(rs.getString("avatar_url"));
             it.setTotalPoints(rs.getInt("total_points"));
             // Read as String to avoid SQLite JDBC nanosecond parsing bug
             String tsStr = rs.getString("last_checkin_at");
@@ -166,7 +200,7 @@ public class UserRepository {
     }
 
     public List<LeaderboardItem> findTopByTotalPoints(int limit) {
-        String sql = "SELECT u.id, u.username, u.total_points, " +
+        String sql = "SELECT u.id, u.username, u.display_name, u.avatar_url, u.total_points, " +
                 "(SELECT MAX(checked_at) FROM user_daily_status uds WHERE uds.user_id = u.id) AS last_checkin_at " +
                 "FROM users u " +
                 "ORDER BY u.total_points DESC, last_checkin_at DESC " +
@@ -175,7 +209,7 @@ public class UserRepository {
     }
 
     public List<LeaderboardItem> findTopByTotalPoints(int limit, int offset) {
-        String sql = "SELECT u.id, u.username, u.total_points, " +
+        String sql = "SELECT u.id, u.username, u.display_name, u.avatar_url, u.total_points, " +
                 "(SELECT MAX(checked_at) FROM user_daily_status uds WHERE uds.user_id = u.id) AS last_checkin_at " +
                 "FROM users u " +
                 "ORDER BY u.total_points DESC, last_checkin_at DESC " +
@@ -207,6 +241,10 @@ public class UserRepository {
         jdbcTemplate.update("UPDATE users SET role = ? WHERE id = ?", newRole, userId);
     }
 
+    public void updateMemberType(Long userId, MemberType memberType) {
+        jdbcTemplate.update("UPDATE users SET member_type = ? WHERE id = ?", memberType.name(), userId);
+    }
+
     public void insertRoleChangeLog(Long targetUserId, Long changedBy, String fromRole, String toRole) {
         jdbcTemplate.update(
                 "INSERT INTO role_change_log (target_user_id, changed_by, from_role, to_role, changed_at) VALUES (?, ?, ?, ?, ?)",
@@ -222,5 +260,29 @@ public class UserRepository {
             return value.longValue();
         }
         return Long.parseLong(rawValue.toString());
+    }
+
+    private MemberType parseMemberType(String memberTypeText) {
+        if (memberTypeText == null || memberTypeText.isBlank()) {
+            return MemberType.REGULAR;
+        }
+        try {
+            return MemberType.valueOf(memberTypeText);
+        } catch (IllegalArgumentException ignored) {
+            return MemberType.REGULAR;
+        }
+    }
+
+    private Boolean parseBooleanValue(Object rawValue, boolean defaultValue) {
+        if (rawValue == null) {
+            return defaultValue;
+        }
+        if (rawValue instanceof Boolean value) {
+            return value;
+        }
+        if (rawValue instanceof Number value) {
+            return value.intValue() != 0;
+        }
+        return Boolean.parseBoolean(rawValue.toString());
     }
 }

@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { checkInToday, getDailyHistory, getTodayProblem } from "../api/dailyProblem";
+import { updateMyProfile } from "../api/user";
 import CheckInModal from "../components/ui/CheckInModal";
 import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import ProblemCard from "../components/ui/ProblemCard";
 import { CardSkeleton } from "../components/ui/Skeleton";
+import { useAuth } from "../context/AuthContext";
+import { parseTags } from "../utils/cf";
+import { Settings2, Tags } from "lucide-react";
 
 const PAGE_SIZE = 10;
 const TEXT = {
@@ -49,6 +53,7 @@ function parseProblemKey(key) {
 }
 
 export default function DailyProblemPage() {
+  const { user, updateUser } = useAuth();
   const [todayData, setTodayData] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [historyPage, setHistoryPage] = useState(1);
@@ -59,6 +64,9 @@ export default function DailyProblemPage() {
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInResult, setCheckInResult] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [showTags, setShowTags] = useState(user?.showProblemTags !== false);
+  const [settingSaving, setSettingSaving] = useState(false);
+  const [settingMessage, setSettingMessage] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -86,6 +94,31 @@ export default function DailyProblemPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setShowTags(user?.showProblemTags !== false);
+  }, [user?.showProblemTags]);
+
+  async function handleToggleTags() {
+    if (!user?.id || settingSaving) return;
+    const nextValue = !showTags;
+    setSettingSaving(true);
+    setSettingMessage("");
+    try {
+      const resp = await updateMyProfile(user.id, { showProblemTags: nextValue });
+      if (resp.code === 200) {
+        setShowTags(nextValue);
+        updateUser(resp.data);
+        setSettingMessage("设置已保存");
+      } else {
+        setSettingMessage(resp.message || "设置保存失败");
+      }
+    } catch {
+      setSettingMessage("设置保存失败，请稍后重试");
+    } finally {
+      setSettingSaving(false);
+    }
+  }
 
   async function handleCheckIn(submissionId) {
     setCheckInLoading(true);
@@ -147,7 +180,6 @@ export default function DailyProblemPage() {
         type: (item.slot || "DAILY").toUpperCase(),
         contestId: parsed.contestId,
         problemIndex: parsed.problemIndex,
-        tags: "",
         isRedrawnCheckedIn: true,
       };
     });
@@ -186,11 +218,53 @@ export default function DailyProblemPage() {
         <p className="text-sm text-error bg-[#fff0f0] rounded-ui px-3 py-2 m-0">{error}</p>
       )}
 
+      <section className="bg-white border border-border rounded-ui px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="grid place-items-center w-9 h-9 flex-shrink-0 rounded-full bg-bg-secondary">
+              <Settings2 size={17} />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-text-primary m-0">每日一题设置</h2>
+              <p className="text-xs text-text-secondary mt-0.5 mb-0">
+                {showTags ? "当前会显示算法标签" : "当前已隐藏算法标签，避免提示解题方向"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {settingMessage && (
+              <span className="hidden sm:inline text-xs text-text-secondary">{settingMessage}</span>
+            )}
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-text-secondary">
+              <Tags size={14} />
+              显示标签
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showTags}
+              aria-label="是否显示每日一题标签"
+              disabled={settingSaving}
+              onClick={handleToggleTags}
+              className={`relative w-11 h-6 rounded-full border-0 transition-colors cursor-pointer disabled:opacity-50 ${
+                showTags ? "bg-[#216e39]" : "bg-[#c8c8c2]"
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                  showTags ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </section>
+
       {hasTodayContent ? (
         <div className="space-y-3">
           {todayDisplay.active.map((problem) => (
             <div key={problem.problemKey}>
-              <ProblemCard problem={problem} />
+              <ProblemCard problem={problem} showTags={showTags} />
               <div className="mt-1.5 flex justify-end">
                 <button
                   className="px-3 py-1 text-xs font-medium text-white bg-success hover:bg-[#268845] rounded-ui border-0 cursor-pointer disabled:opacity-40"
@@ -205,7 +279,7 @@ export default function DailyProblemPage() {
 
           {todayDisplay.extra.map((problem) => (
             <div key={problem.problemKey}>
-              <ProblemCard problem={problem} />
+              <ProblemCard problem={problem} showTags={showTags} />
               <div className="mt-1.5 flex justify-end gap-2 items-center">
                 <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-0.5 rounded">
                   {TEXT.redrawnCheckedIn}
@@ -232,7 +306,12 @@ export default function DailyProblemPage() {
       )}
 
       <section>
-        <h2 className="text-base font-semibold text-text-primary m-0 mb-3">{TEXT.history}</h2>
+        <div className="mb-3">
+          <h2 className="text-base font-semibold text-text-primary m-0">{TEXT.history}</h2>
+          <p className="text-xs text-text-secondary mt-1 mb-0">
+            每日题目会自动保存，可按日期展开查看。
+          </p>
+        </div>
         {historyDates.length === 0 ? (
           <EmptyState title={TEXT.noHistory} />
         ) : (
@@ -272,6 +351,14 @@ export default function DailyProblemPage() {
                             {item.name}
                           </a>
                           <span className="text-text-secondary">({item.rating ?? "-"})</span>
+                          {showTags && parseTags(item.tags).map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[10px] text-text-secondary bg-bg-secondary px-1.5 py-0.5 rounded-full"
+                            >
+                              {tag}
+                            </span>
+                          ))}
                           {item.isRedrawn && !item.checkedIn && (
                             <span className="text-[11px] text-text-secondary bg-bg-secondary px-1.5 py-0.5 rounded">
                               {TEXT.redrawn}

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../ui/Sidebar";
 import TopBar from "../ui/TopBar";
@@ -10,6 +10,8 @@ const IS_VITE_DEV = import.meta.env.DEV;
 
 export default function AppLayout() {
   const { isDevBackend, setDevMode } = useAuth();
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // 仅 Vite dev 模式下尝试探测后端 profile，避免 prod 产生无意义的 404 请求
   useEffect(() => {
@@ -28,17 +30,38 @@ export default function AppLayout() {
   }, [setDevMode]);
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar />
-        <main className="flex-1 overflow-y-auto p-page" style={{ maxWidth: 1400 }}>
-          <Outlet />
-          {isDevBackend && (
-            <div className="mt-5">
-              <DevPanel />
-            </div>
-          )}
+    <div className="app-shell">
+      <div className="ambient-grid" aria-hidden="true" />
+      <div className="particle-field" aria-hidden="true">
+        {Array.from({ length: 14 }, (_, index) => (
+          <span key={index} style={{ "--particle-index": index }} />
+        ))}
+      </div>
+      <Sidebar
+        collapsed={!sidebarHovered}
+        mobileOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        onHoverStart={() => setSidebarHovered(true)}
+        onHoverEnd={() => setSidebarHovered(false)}
+      />
+      {mobileMenuOpen && (
+        <button
+          className="sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="关闭导航"
+        />
+      )}
+      <div className="app-frame">
+        <TopBar onMenuToggle={() => setMobileMenuOpen(true)} />
+        <main className="app-main">
+          <div className="app-content">
+            <Outlet />
+            {isDevBackend && (
+              <div className="mt-5">
+                <DevPanel />
+              </div>
+            )}
+          </div>
         </main>
       </div>
     </div>
