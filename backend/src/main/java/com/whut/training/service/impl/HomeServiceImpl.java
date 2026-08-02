@@ -47,7 +47,8 @@ public class HomeServiceImpl implements HomeService {
         o.setTopUsers(top);
 
         LocalDate today = timeProvider.today();
-        dailyProblemService.ensureTodaySlots();
+        boolean problemPoolReady = dailyProblemService.ensureTodaySlots();
+        o.setProblemPoolInitializing(!problemPoolReady);
         var slots = dailyProblemRepository.findDailySlotsByDate(today);
         if (slots != null && !slots.isEmpty()) {
             // Filter out redrawn slots — only show active (non-redrawn) problems on homepage

@@ -349,7 +349,7 @@ export default function ProfilePage() {
           <p className="text-xs text-text-secondary mt-1 mb-0">
             {currentProfile?.codeforcesHandle
               ? `当前已绑定 ${currentProfile.codeforcesHandle}，也可以重新验证后更换。`
-              : "绑定后才能校验每日一题和自主练习的提交。"}
+              : "绑定后才能校验每日一题的提交。"}
           </p>
         </div>
 

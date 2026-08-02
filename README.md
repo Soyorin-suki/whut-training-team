@@ -2,7 +2,7 @@
 
 竞赛编程训练平台 —— 基于 Codeforces 的每日打卡、自主练习与推题系统。
 
-- 后端：Spring Boot 3.3 + Maven + SQLite（JdbcTemplate，无 JPA）
+- 后端：Spring Boot 3.3 + Maven + MySQL 8（JdbcTemplate，无 JPA）
 - 前端：React 18 + Vite + Tailwind CSS + Radix UI + react-router-dom v6
 - 认证：Access Token + Refresh Token 双重令牌
 - 用户分级：`USER` / `ADMIN` / `SUPER_ADMIN` 三级权限
@@ -16,7 +16,7 @@ whut-training-team
 │   │   ├── aspect/annotation        # @ServiceLog 注解
 │   │   ├── aspect/logging           # ServiceLogAspect AOP 日志切面
 │   │   ├── common                   # ApiResponse、Codeforces 工具
-│   │   ├── config                   # WebConfig、DataInitializer、SqliteInitializer
+│   │   ├── config                   # WebConfig、DataInitializer、MySqlInitializer
 │   │   ├── controller               # 控制层（11 个 Controller）
 │   │   ├── context                  # UserContext（ThreadLocal）
 │   │   ├── domain/dto               # 请求/响应 DTO
@@ -60,7 +60,8 @@ whut-training-team
 | 用户系统 | 登录账号与展示用户名分离、Codeforces 所有权验证绑定、token 刷新/注销、资料修改、三级权限 |
 | 每日一题 | 每日两题（easy/hard），rating 阈值分割，打卡校验（Codeforces 提交），积分 = 题目 rating，支持管理员重生成/重抽 |
 | 排行榜 | 按总积分排序，支持分页，平局按最后打卡时间 |
-| 自主练习 | 按 rating 范围随机抽题，提交校验（不计分），支持历史记录查看与删除 |
+| 自主练习 | 按 rating 与多个 Codeforces 标签组合抽题（标签为 AND 匹配），仅记录抽题历史，不进行提交校验 |
+| 个人题单 | 用户创建一级专题题单并保存题目；管理员可发布全站只读共享题单 |
 | 首页聚合 | 活跃用户数、排行榜 Top N、今日题目（easy+hard）、今日推题、打卡统计、热力图（365 天） |
 | 推题系统 | 用户提交 → 管理员审核 → 推题池管理 → 每日定时推送 → 用户提交解答，支持推题历史查看 |
 | 热力图 | GitHub 风格贡献热力图（365 天），colorLevel 0-4，首页+个人页统一 |
@@ -69,7 +70,28 @@ whut-training-team
 
 ## 启动方式
 
-### 1. 启动后端
+### 1. 启动 MySQL
+
+已安装 Docker 时，推荐直接在项目根目录运行：
+
+```bash
+docker compose up -d mysql
+```
+
+默认会创建 `whut_training` 数据库，用户名为 `root`，开发密码为
+`whut_dev_password`。数据保存在 Docker volume 中。
+
+如果使用本机已有 MySQL，请设置以下环境变量：
+
+```text
+MYSQL_URL=jdbc:mysql://localhost:3306/whut_training?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+MYSQL_USERNAME=root
+MYSQL_PASSWORD=你的密码
+```
+
+MySQL 账号需要拥有创建 `whut_training` 数据库和表的权限。
+
+### 2. 启动后端
 
 ```bash
 cd backend
@@ -78,7 +100,9 @@ mvn spring-boot:run
 
 后端默认地址：`http://localhost:8080`
 
-### 2. 启动前端
+后端连接成功后会自动创建空表和 SUPER_ADMIN，不会读取或迁移旧 SQLite 数据。
+
+### 3. 启动前端
 
 ```bash
 cd frontend

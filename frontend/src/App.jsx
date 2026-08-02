@@ -1,20 +1,24 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
-import HomePage from "./pages/HomePage";
-import DailyProblemPage from "./pages/DailyProblemPage";
-import ContestsPage from "./pages/ContestsPage";
-import LeaderboardPage from "./pages/LeaderboardPage";
-import PracticePage from "./pages/PracticePage";
-import PushPage from "./pages/PushPage";
-import ProfilePage from "./pages/ProfilePage";
-import MemberProfilePage from "./pages/MemberProfilePage";
-import AdminDailyPage from "./pages/admin/AdminDailyPage";
-import AdminUsersPage from "./pages/admin/AdminUsersPage";
-import AdminPushPage from "./pages/admin/AdminPushPage";
-import NotFoundPage from "./pages/NotFoundPage";
+
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const DailyProblemPage = lazy(() => import("./pages/DailyProblemPage"));
+const ContestsPage = lazy(() => import("./pages/ContestsPage"));
+const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
+const PracticePage = lazy(() => import("./pages/PracticePage"));
+const ProblemListsPage = lazy(() => import("./pages/ProblemListsPage"));
+const PushPage = lazy(() => import("./pages/PushPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const MemberProfilePage = lazy(() => import("./pages/MemberProfilePage"));
+const AdminDailyPage = lazy(() => import("./pages/admin/AdminDailyPage"));
+const AdminTrainingDashboardPage = lazy(() => import("./pages/admin/AdminTrainingDashboardPage"));
+const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
+const AdminPushPage = lazy(() => import("./pages/admin/AdminPushPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 function AuthGuard({ children }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -53,7 +57,8 @@ function GuestGuard({ children }) {
 
 export default function App() {
   return (
-    <Routes>
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
       {/* Public / guest routes */}
       <Route path="/login" element={<GuestGuard><LoginPage /></GuestGuard>} />
       <Route path="/register" element={<GuestGuard><RegisterPage /></GuestGuard>} />
@@ -65,11 +70,13 @@ export default function App() {
         <Route path="/contests" element={<ContestsPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/practice" element={<PracticePage />} />
+        <Route path="/problem-lists" element={<ProblemListsPage />} />
         <Route path="/push" element={<PushPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/members/:id" element={<MemberProfilePage />} />
 
         {/* Admin routes */}
+        <Route path="/admin/training" element={<AdminGuard><AdminTrainingDashboardPage /></AdminGuard>} />
         <Route path="/admin/daily" element={<AdminGuard><AdminDailyPage /></AdminGuard>} />
         <Route path="/admin/users" element={<AdminGuard><AdminUsersPage /></AdminGuard>} />
         <Route path="/admin/push" element={<AdminGuard><AdminPushPage /></AdminGuard>} />
@@ -77,6 +84,16 @@ export default function App() {
 
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+      </Routes>
+    </Suspense>
+  );
+}
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[45vh] items-center justify-center" role="status">
+      <span className="route-loader" aria-hidden="true" />
+      <span className="sr-only">页面加载中</span>
+    </div>
   );
 }

@@ -4,7 +4,10 @@ import com.whut.training.domain.dto.CodeforcesOverview;
 import com.whut.training.domain.entity.User;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.CodeforcesProfileSnapshotRepository;
+import com.whut.training.repository.CodeforcesRatingHistoryRepository;
 import com.whut.training.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,18 +28,20 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 汇总并缓存 Codeforces 用户公开统计。
  *
- * <p>内存缓存服务当前进程的热点请求，SQLite 快照保证重启后仍能快速返回。
+ * <p>内存缓存服务当前进程的热点请求，MySQL 快照保证重启后仍能快速返回。
  * 过期快照采用 stale-while-revalidate，先响应旧数据，再在后台刷新。
  */
 @Service
 public class CodeforcesProfileService {
 
+    private static final Logger log = LoggerFactory.getLogger(CodeforcesProfileService.class);
     private static final int SUBMISSION_LIMIT = 10000;
     private static final int RECENT_CONTEST_LIMIT = 8;
 
     private final UserRepository userRepository;
     private final CodeforcesApiService codeforcesApiService;
     private final CodeforcesProfileSnapshotRepository snapshotRepository;
+    private final CodeforcesRatingHistoryRepository ratingHistoryRepository;
     private final Duration cacheDuration;
     private final Map<Long, CacheEntry> memoryCache = new ConcurrentHashMap<>();
     private final Map<Long, Object> refreshLocks = new ConcurrentHashMap<>();
@@ -46,11 +51,13 @@ public class CodeforcesProfileService {
             UserRepository userRepository,
             CodeforcesApiService codeforcesApiService,
             CodeforcesProfileSnapshotRepository snapshotRepository,
+            CodeforcesRatingHistoryRepository ratingHistoryRepository,
             @Value("${codeforces.profile-cache-minutes:30}") long cacheMinutes
     ) {
         this.userRepository = userRepository;
         this.codeforcesApiService = codeforcesApiService;
         this.snapshotRepository = snapshotRepository;
+        this.ratingHistoryRepository = ratingHistoryRepository;
         this.cacheDuration = Duration.ofMinutes(Math.max(1, cacheMinutes));
     }
 
@@ -77,7 +84,10 @@ public class CodeforcesProfileService {
             return snapshot.overview().withStale(true);
         }
 
-        return refresh(userId);
+        CodeforcesOverview initial = initialOverview(user, handle);
+        memoryCache.put(userId, new CacheEntry(handle, initial, null));
+        refreshInBackground(userId);
+        return initial;
     }
 
     public CodeforcesOverview refresh(Long userId) {
@@ -91,6 +101,36 @@ public class CodeforcesProfileService {
         }
     }
 
+    /**
+     * 为旧账号按需补齐完整 Rating 比赛历史。
+     *
+     * <p>导出只在本地历史为空时调用一次 user.rating，避免为补历史重新下载大量提交记录。
+     */
+    public void ensureRatingHistory(Long userId) {
+        if (ratingHistoryRepository.existsByUserId(userId)) {
+            return;
+        }
+        synchronized (refreshLocks.computeIfAbsent(userId, ignored -> new Object())) {
+            if (ratingHistoryRepository.existsByUserId(userId)) {
+                return;
+            }
+            User user = requireUser(userId);
+            String handle = normalizeHandle(user.getCodeforcesHandle());
+            if (handle == null) {
+                return;
+            }
+            Optional<List<CodeforcesApiService.CodeforcesRatingChange>> result =
+                    codeforcesApiService.getUserRatingHistory(handle);
+            if (result.isEmpty()) {
+                throw new BusinessException(
+                        503,
+                        "Codeforces Rating history sync failed for " + handle + "; please try again later"
+                );
+            }
+            ratingHistoryRepository.replaceForUser(userId, result.get());
+        }
+    }
+
     private void refreshInBackground(Long userId) {
         if (!refreshingUsers.add(userId)) {
             return;
@@ -98,8 +138,8 @@ public class CodeforcesProfileService {
         CompletableFuture.runAsync(() -> {
             try {
                 refresh(userId);
-            } catch (RuntimeException ignored) {
-                // 旧快照仍可继续服务；下一次过期访问会再次尝试。
+            } catch (RuntimeException ex) {
+                log.warn("Background Codeforces profile refresh failed for userId={}: {}", userId, ex.getMessage());
             } finally {
                 refreshingUsers.remove(userId);
             }
@@ -192,6 +232,7 @@ public class CodeforcesProfileService {
             userRepository.save(user);
         }
         snapshotRepository.save(user.getId(), handle, overview);
+        ratingHistoryRepository.replaceForUser(user.getId(), ratingChanges);
         memoryCache.put(user.getId(), new CacheEntry(handle, overview, syncedAt));
         return overview;
     }
@@ -260,6 +301,27 @@ public class CodeforcesProfileService {
         return new CodeforcesOverview(
                 null, null, null, 0, 0, 0, 0, null,
                 false, null, false, List.of(), List.of()
+        );
+    }
+
+    /**
+     * 首次没有统计快照时立即返回站内已有的基础资料，完整统计交给后台刷新。
+     */
+    private CodeforcesOverview initialOverview(User user, String handle) {
+        return new CodeforcesOverview(
+                handle,
+                user.getCodeforcesRating(),
+                user.getMaxRating(),
+                0,
+                0,
+                0,
+                0,
+                null,
+                false,
+                null,
+                true,
+                List.of(),
+                List.of()
         );
     }
 

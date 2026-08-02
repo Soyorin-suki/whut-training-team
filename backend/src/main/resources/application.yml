@@ -5,16 +5,25 @@ spring:
   application:
     name: training-backend
   datasource:
-    driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:./data/training.db?busy_timeout=5000
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "${MYSQL_URL:jdbc:mysql://localhost:3306/whut_training?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}"
+    username: "${MYSQL_USERNAME:root}"
+    password: "${MYSQL_PASSWORD:123456}"
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 10000
 
 codeforces:
   base_url: https://codeforces.com/api
   profile-cache-minutes: 30
 
-atcoder:
-  contests-url: https://atcoder.jp/contests/?lang=en
+contests:
   cache-minutes: 15
+  codeforces-url: https://codeforces.com/api/contest.list?gym=false
+  atcoder-url: https://atcoder.jp/contests/?lang=en
+  nowcoder-url: https://ac.nowcoder.com/acm/contest/vip-index
+  luogu-url: https://www.luogu.com.cn/contest/list
 
 push:
   defaultAutoApprove: false
@@ -25,7 +34,7 @@ superAdmin:
 
 app:
   database:
-    type: sqlite
+    type: mysql
   logging:
     service:
       enabled: true
@@ -33,6 +42,7 @@ app:
     access-token-ttl-seconds: 1800
     refresh-token-ttl-seconds: 604800
   daily-problem:
+    initial-sync-enabled: true
     min-rating: 1200
     max-rating: 2000
     no-repeat-days: 90

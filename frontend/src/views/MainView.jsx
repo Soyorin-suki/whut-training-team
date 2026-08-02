@@ -3,7 +3,6 @@ import { getUserInitial } from "../auth";
 import { logout, updateMyProfile } from "../api/user";
 import {
   checkInToday,
-  checkPractice,
   drawPracticeProblem,
   getDailyHistory,
   getTodayProblem,
@@ -82,7 +81,6 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
   const [practiceMinRating, setPracticeMinRating] = useState(1200);
   const [practiceMaxRating, setPracticeMaxRating] = useState(1600);
   const [practiceDraw, setPracticeDraw] = useState(null);
-  const [practiceSubmissionId, setPracticeSubmissionId] = useState("");
 
   const [profileUsername, setProfileUsername] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
@@ -215,38 +213,8 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
         return;
       }
       setPracticeDraw(resp.data);
-      setPracticeSubmissionId("");
     } catch (error) {
       setMessage(error.response?.data?.message || "抽题请求失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handlePracticeCheck() {
-    if (!practiceDraw?.drawId) {
-      setMessage("请先抽题");
-      return;
-    }
-    if (!practiceSubmissionId.trim()) {
-      setMessage("请输入提交 ID");
-      return;
-    }
-    setLoading(true);
-    setMessage("");
-    try {
-      const resp = await checkPractice(practiceDraw.drawId, Number(practiceSubmissionId), tokens);
-      if (resp.code !== 200) {
-        setMessage(resp.message || "校验失败");
-        return;
-      }
-      if (resp.data?.accepted) {
-        setMessage("练习题通过（不计分）");
-      } else {
-        setMessage(`练习题未通过，判题结果=${resp.data?.verdict || "-"}`);
-      }
-    } catch (error) {
-      setMessage(error.response?.data?.message || "练习题校验请求失败");
     } finally {
       setLoading(false);
     }
@@ -447,17 +415,6 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
               </button>
             </div>
             <ProblemCard problem={practiceDraw?.problem} />
-            <div className="action-row">
-              <input
-                className="auth-input inline-input"
-                value={practiceSubmissionId}
-                onChange={(event) => setPracticeSubmissionId(event.target.value)}
-                placeholder="输入练习题提交 ID"
-              />
-              <button className="primary-button" type="button" onClick={handlePracticeCheck}>
-                提交校验（不计分）
-              </button>
-            </div>
           </section>
         )}
 

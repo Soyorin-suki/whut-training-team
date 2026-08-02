@@ -7,11 +7,22 @@ import { useAuth } from "../../context/AuthContext";
 import { checkDevStatus } from "../../api/dev";
 
 const IS_VITE_DEV = import.meta.env.DEV;
+const SIDEBAR_STORAGE_KEY = "whut-acm:sidebar-collapsed";
 
 export default function AppLayout() {
   const { isDevBackend, setDevMode } = useAuth();
-  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
+    window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "false"
+  ));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      return next;
+    });
+  }
 
   // 仅 Vite dev 模式下尝试探测后端 profile，避免 prod 产生无意义的 404 请求
   useEffect(() => {
@@ -38,11 +49,10 @@ export default function AppLayout() {
         ))}
       </div>
       <Sidebar
-        collapsed={!sidebarHovered}
+        collapsed={sidebarCollapsed}
         mobileOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
-        onHoverStart={() => setSidebarHovered(true)}
-        onHoverEnd={() => setSidebarHovered(false)}
+        onToggle={toggleSidebar}
       />
       {mobileMenuOpen && (
         <button

@@ -9,14 +9,18 @@ import { getRatingMeta } from "../../utils/cf";
 import { CardSkeleton } from "../ui/Skeleton";
 
 const CHART_COLORS = [
-  "#111111",
-  "#353535",
-  "#585858",
-  "#7d7d7d",
-  "#a1a1a1",
-  "#bdbdbd",
-  "#d5d5d5",
-  "#e8e8e8",
+  "#4f6fd1",
+  "#8bc96d",
+  "#f5bb45",
+  "#ef6262",
+  "#61b4d1",
+  "#43a983",
+  "#ff7648",
+  "#a65cc0",
+  "#ec64ae",
+  "#5b74be",
+  "#77c8c7",
+  "#9acd62",
 ];
 
 export default function CodeforcesOverview({
@@ -57,6 +61,38 @@ export default function CodeforcesOverview({
       cancelled = true;
     };
   }, [userId, handle]);
+
+  useEffect(() => {
+    if (!userId || !handle || !data?.stale) return undefined;
+
+    let cancelled = false;
+    let requesting = false;
+    let attempts = 0;
+    const timer = window.setInterval(async () => {
+      if (requesting || attempts >= 10) {
+        if (attempts >= 10) window.clearInterval(timer);
+        return;
+      }
+      requesting = true;
+      attempts += 1;
+      try {
+        const response = await getCodeforcesOverview(userId);
+        if (!cancelled && response.code === 200) {
+          setData(response.data);
+          if (!response.data?.stale) window.clearInterval(timer);
+        }
+      } catch {
+        // Keep the basic or stale snapshot visible while the background refresh retries.
+      } finally {
+        requesting = false;
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [userId, handle, data?.stale]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -107,6 +143,8 @@ export default function CodeforcesOverview({
     );
   }
 
+  const ratingMeta = getRatingMeta(data?.currentRating);
+
   if (compact) {
     return (
       <section className="bg-white border border-border rounded-ui p-4">
@@ -128,14 +166,17 @@ export default function CodeforcesOverview({
         </div>
         <div className="grid grid-cols-3 gap-2">
           <CompactStat label="已解决" value={data?.solvedCount ?? 0} />
-          <CompactStat label="当前 Rating" value={data?.currentRating ?? "-"} />
+          <CompactStat
+            label="当前 Rating"
+            value={data?.currentRating ?? "-"}
+            valueColor={ratingMeta.color}
+          />
           <CompactStat label="Rated 比赛" value={data?.ratedContestCount ?? 0} />
         </div>
       </section>
     );
   }
 
-  const ratingMeta = getRatingMeta(data?.currentRating);
   return (
     <section className="space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -154,7 +195,7 @@ export default function CodeforcesOverview({
             </a>
             {data?.stale && (
               <span className="text-[11px] text-text-secondary">
-                正在后台更新，当前显示上次快照
+                {data?.syncedAt ? "正在后台更新，当前显示上次快照" : "正在后台同步完整数据"}
               </span>
             )}
           </div>
@@ -222,66 +263,154 @@ function OverviewStat({ label, value, hint, valueColor }) {
   );
 }
 
-function CompactStat({ label, value }) {
+function CompactStat({ label, value, valueColor }) {
   return (
     <div className="bg-bg-secondary rounded-ui px-3 py-2.5">
       <span className="block text-[11px] font-semibold text-text-secondary">{label}</span>
-      <strong className="block text-lg text-text-primary mt-0.5">{value}</strong>
+      <strong
+        className="block text-lg text-text-primary mt-0.5"
+        style={valueColor ? { color: valueColor } : undefined}
+      >
+        {value}
+      </strong>
     </div>
   );
 }
 
 function TagDonutChart({ items }) {
+  const [activeIndex, setActiveIndex] = useState(null);
   const chartItems = useMemo(() => {
-    const top = items.slice(0, 7);
-    const otherCount = items.slice(7).reduce((sum, item) => sum + item.count, 0);
+    const top = items.slice(0, 11);
+    const otherCount = items.slice(11).reduce((sum, item) => sum + item.count, 0);
     return otherCount > 0 ? [...top, { tag: "其他", count: otherCount }] : top;
   }, [items]);
   const total = chartItems.reduce((sum, item) => sum + item.count, 0);
+  const activeItem = activeIndex == null ? null : chartItems[activeIndex];
   let cursor = 0;
-  const gradient = chartItems.map((item, index) => {
-    const start = cursor;
-    cursor += total ? (item.count / total) * 100 : 0;
-    return `${CHART_COLORS[index]} ${start}% ${cursor}%`;
-  }).join(", ");
+  const arcs = chartItems.map((item, index) => {
+    const sweep = total ? (item.count / total) * 360 : 0;
+    const gap = Math.min(2.4, sweep * 0.18);
+    const arc = {
+      ...item,
+      index,
+      startAngle: cursor + gap / 2,
+      endAngle: cursor + sweep - gap / 2,
+      percent: total ? (item.count / total) * 100 : 0,
+    };
+    cursor += sweep;
+    return arc;
+  });
 
   return (
-    <div className="bg-white border border-border rounded-ui p-4">
-      <h3 className="text-sm font-semibold text-text-primary mt-0 mb-4">题目标签分布</h3>
+    <div className="bg-white border border-border rounded-ui p-4 sm:p-5">
+      <div className="flex items-end justify-between gap-3 mb-2">
+        <h3 className="text-sm font-semibold text-text-primary m-0">题目标签分布</h3>
+        <span className="text-[11px] text-text-secondary">悬停查看详情</span>
+      </div>
       {total === 0 ? (
         <p className="text-sm text-text-secondary my-12 text-center">暂无 AC 题目标签</p>
       ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-5">
-          <div
-            className="relative w-36 h-36 rounded-full flex-shrink-0"
-            style={{ background: `conic-gradient(${gradient})` }}
-            aria-label="题目标签饼状图"
-          >
-            <div className="absolute inset-[27%] rounded-full bg-white flex items-center justify-center text-center">
-              <span>
-                <strong className="block text-xl leading-none">{total}</strong>
-                <small className="text-[10px] text-text-secondary">标签计数</small>
+        <div className="flex flex-col md:flex-row items-center gap-3 lg:gap-5">
+          <div className="relative w-[250px] h-[250px] flex-shrink-0">
+            <svg
+              viewBox="0 0 260 260"
+              className="w-full h-full overflow-visible"
+              role="img"
+              aria-label="可交互的题目标签环形图"
+              onMouseLeave={() => setActiveIndex(null)}
+            >
+              <circle cx="130" cy="130" r="78" fill="none" stroke="#f1f2f3" strokeWidth="28" />
+              {arcs.map((arc) => {
+                const active = activeIndex === arc.index;
+                return (
+                  <path
+                    key={arc.tag}
+                    d={describeArc(130, 130, active ? 82 : 78, arc.startAngle, arc.endAngle)}
+                    fill="none"
+                    stroke={CHART_COLORS[arc.index % CHART_COLORS.length]}
+                    strokeWidth={active ? 31 : 26}
+                    strokeLinecap="round"
+                    className="cursor-pointer outline-none transition-all duration-200"
+                    style={{
+                      filter: active
+                        ? `drop-shadow(0 5px 6px ${CHART_COLORS[arc.index % CHART_COLORS.length]}55)`
+                        : "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
+                    }}
+                    onMouseEnter={() => setActiveIndex(arc.index)}
+                    onFocus={() => setActiveIndex(arc.index)}
+                    onBlur={() => setActiveIndex(null)}
+                    tabIndex={0}
+                    aria-label={`${arc.tag}：${arc.count}，${arc.percent.toFixed(1)}%`}
+                  />
+                );
+              })}
+            </svg>
+            <div className="pointer-events-none absolute inset-[30%] flex items-center justify-center text-center">
+              <span className="min-w-0">
+                {activeItem ? (
+                  <>
+                    <small className="block max-w-[92px] text-[11px] font-semibold text-text-secondary truncate">
+                      {activeItem.tag}
+                    </small>
+                    <strong className="block text-2xl leading-none mt-1 text-[#1769db]">
+                      {activeItem.count}
+                    </strong>
+                    <small className="block text-[11px] text-text-secondary mt-1">
+                      {((activeItem.count / total) * 100).toFixed(1)}%
+                    </small>
+                  </>
+                ) : (
+                  <>
+                    <strong className="block text-3xl leading-none text-[#1769db]">{total}</strong>
+                    <small className="block text-xs text-text-secondary mt-2">Total</small>
+                  </>
+                )}
               </span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 w-full min-w-0">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 w-full min-w-0">
             {chartItems.map((item, index) => (
-              <div key={item.tag} className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                key={item.tag}
+                className={`flex items-center gap-2 min-w-0 rounded-md px-1.5 py-1 text-left transition-colors ${
+                  activeIndex === index ? "bg-bg-secondary" : "bg-transparent hover:bg-bg-secondary"
+                }`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseLeave={() => setActiveIndex(null)}
+                onFocus={() => setActiveIndex(index)}
+                onBlur={() => setActiveIndex(null)}
+              >
                 <span
-                  className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: CHART_COLORS[index] }}
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                 />
                 <span className="text-xs text-text-secondary truncate flex-1">
                   {item.tag}
                 </span>
                 <strong className="text-xs text-text-primary">{item.count}</strong>
-              </div>
+              </button>
             ))}
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function describeArc(cx, cy, radius, startAngle, endAngle) {
+  const start = polarPoint(cx, cy, radius, startAngle);
+  const end = polarPoint(cx, cy, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
+}
+
+function polarPoint(cx, cy, radius, angle) {
+  const radians = ((angle - 90) * Math.PI) / 180;
+  return {
+    x: cx + radius * Math.cos(radians),
+    y: cy + radius * Math.sin(radians),
+  };
 }
 
 function RecentContests({ items }) {

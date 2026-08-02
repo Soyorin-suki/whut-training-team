@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * 普通 ADMIN 账号需用户自行注册后由超管提升权限。
  */
 @Component
-@DependsOn("sqliteInitializer")
+@DependsOn("mySqlInitializer")
 public class DataInitializer {
 
     private final UserRepository userRepository;

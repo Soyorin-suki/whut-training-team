@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 const LEVEL_COLORS = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
 const CELL_SIZE = 16;
 const CELL_GAP = 3;
@@ -6,7 +8,7 @@ const DAY_LABEL_WIDTH = 34;
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY_NAMES = ["", "Mon", "", "Wed", "", "Fri", ""];
 
-export default function Heatmap({ data }) {
+function Heatmap({ data }) {
   const dateMap = Object.fromEntries((data || []).map((item) => [item.date, item]));
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -131,6 +133,8 @@ export default function Heatmap({ data }) {
     </div>
   );
 }
+
+export default memo(Heatmap);
 
 function formatDate(date) {
   const year = date.getFullYear();

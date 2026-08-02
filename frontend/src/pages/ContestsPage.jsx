@@ -14,12 +14,20 @@ const SHANGHAI_TIME = new Intl.DateTimeFormat("zh-CN", {
   hour12: false,
 });
 
+const PLATFORM_META = {
+  CODEFORCES: { label: "Codeforces", color: "#315fc4", soft: "#edf3ff" },
+  ATCODER: { label: "AtCoder", color: "#3f4650", soft: "#f0f1f2" },
+  NOWCODER: { label: "牛客", color: "#159963", soft: "#eaf8f1" },
+  LUOGU: { label: "洛谷", color: "#dd6818", soft: "#fff2e9" },
+};
+
 export default function ContestsPage() {
   const [contests, setContests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [platformFilter, setPlatformFilter] = useState("ALL");
 
   const loadContests = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -33,7 +41,7 @@ export default function ContestsPage() {
         setError(resp.message || "近期比赛加载失败");
       }
     } catch (requestError) {
-      setError(requestError.response?.data?.message || "AtCoder 近期比赛暂时无法获取");
+      setError(requestError.response?.data?.message || "近期比赛暂时无法获取");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -53,6 +61,12 @@ export default function ContestsPage() {
     () => [...contests].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)),
     [contests]
   );
+  const visibleContests = useMemo(
+    () => platformFilter === "ALL"
+      ? sortedContests
+      : sortedContests.filter((contest) => contest.platform === platformFilter),
+    [platformFilter, sortedContests]
+  );
 
   return (
     <div className="space-y-5">
@@ -63,7 +77,7 @@ export default function ContestsPage() {
           </p>
           <h1 className="text-xl font-bold text-text-primary mt-1 mb-0">近期比赛</h1>
           <p className="text-sm text-text-secondary mt-1 mb-0">
-            AtCoder 官方赛程，时间已转换为北京时间。
+            聚合 Codeforces、AtCoder、牛客与洛谷赛程，统一显示为北京时间。
           </p>
         </div>
         <button
@@ -81,27 +95,59 @@ export default function ContestsPage() {
         <p className="text-sm text-error bg-[#fff0f0] rounded-ui px-3 py-2 m-0">{error}</p>
       )}
 
+      {!loading && sortedContests.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" aria-label="比赛平台筛选">
+          <PlatformFilter
+            active={platformFilter === "ALL"}
+            label="全部"
+            count={sortedContests.length}
+            onClick={() => setPlatformFilter("ALL")}
+          />
+          {Object.entries(PLATFORM_META).map(([platform, meta]) => (
+            <PlatformFilter
+              key={platform}
+              active={platformFilter === platform}
+              label={meta.label}
+              count={sortedContests.filter((contest) => contest.platform === platform).length}
+              color={meta.color}
+              onClick={() => setPlatformFilter(platform)}
+            />
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <ListSkeleton rows={6} />
-      ) : sortedContests.length === 0 ? (
-        <EmptyState title="暂时没有公布的近期比赛" />
+      ) : visibleContests.length === 0 ? (
+        <EmptyState title={sortedContests.length === 0 ? "暂时没有公布的近期比赛" : "该平台暂时没有近期比赛"} />
       ) : (
         <div className="grid gap-3">
-          {sortedContests.map((contest, index) => {
+          {visibleContests.map((contest, index) => {
             const status = getContestStatus(contest, now);
+            const platform = PLATFORM_META[contest.platform] || {
+              label: contest.platform || "Contest",
+              color: "#3f4650",
+              soft: "#f0f1f2",
+            };
             return (
               <article
                 key={`${contest.platform}-${contest.contestId}`}
-                className="bg-white border border-border rounded-ui p-4 sm:p-5"
+                className="group bg-white border border-border rounded-ui p-4 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(20,24,30,0.08)]"
               >
                 <div className="flex items-start gap-4">
-                  <div className="hidden sm:flex w-12 h-12 flex-shrink-0 items-center justify-center rounded-full bg-[#f1f1ec] text-text-primary">
+                  <div
+                    className="hidden sm:flex w-12 h-12 flex-shrink-0 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105"
+                    style={{ backgroundColor: platform.soft, color: platform.color }}
+                  >
                     {status.live ? <Radio size={20} /> : <CalendarClock size={20} />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] font-extrabold tracking-[0.14em] text-text-secondary">
-                        ATCODER · {contest.type?.toUpperCase() || "CONTEST"}
+                      <span
+                        className="text-[10px] font-extrabold tracking-[0.12em] px-2 py-1 rounded-full"
+                        style={{ color: platform.color, backgroundColor: platform.soft }}
+                      >
+                        {platform.label.toUpperCase()} · {contest.type?.toUpperCase() || "CONTEST"}
                       </span>
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                         status.live
@@ -145,9 +191,29 @@ export default function ContestsPage() {
       )}
 
       <p className="text-xs text-text-secondary m-0">
-        数据来自 AtCoder 官方 Upcoming Contests 页面，后端会短时缓存；具体安排以官方页面为准。
+        数据来自四个平台的官方比赛页或公开接口，后端会分平台短时缓存；具体安排以各平台官方页面为准。
       </p>
     </div>
+  );
+}
+
+function PlatformFilter({ active, label, count, color, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+        active
+          ? "border-text-primary bg-text-primary text-white"
+          : "border-border bg-white text-text-secondary hover:text-text-primary hover:border-[#aaa]"
+      }`}
+    >
+      {color && !active && (
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+      )}
+      {label}
+      <span className={active ? "text-white/65" : "text-text-secondary"}>{count}</span>
+    </button>
   );
 }
 

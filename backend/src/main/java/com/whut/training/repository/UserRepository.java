@@ -131,6 +131,14 @@ public class UserRepository {
         );
     }
 
+    public List<User> findByMemberType(MemberType memberType) {
+        return jdbcTemplate.query(
+                "SELECT " + SELECT_COLUMNS + " FROM users WHERE member_type = ? ORDER BY total_points DESC, id ASC",
+                userRowMapperWithPoints,
+                memberType.name()
+        );
+    }
+
     public Optional<User> findById(Long id) {
         List<User> users = jdbcTemplate.query(
                 "SELECT " + SELECT_COLUMNS + " FROM users WHERE id = ?",
@@ -188,7 +196,7 @@ public class UserRepository {
             it.setDisplayName(rs.getString("display_name"));
             it.setAvatarUrl(rs.getString("avatar_url"));
             it.setTotalPoints(rs.getInt("total_points"));
-            // Read as String to avoid SQLite JDBC nanosecond parsing bug
+            // checked_at 使用 ISO 字符串存储，按字符串读取后统一解析。
             String tsStr = rs.getString("last_checkin_at");
             if (tsStr != null && !tsStr.isEmpty()) {
                 // Truncate nanoseconds to milliseconds for OffsetDateTime parsing

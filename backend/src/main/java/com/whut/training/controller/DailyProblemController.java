@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * 每日一题与练习题接口。
  *
- * <p>包括今日题获取、每日打卡、历史查询、自主抽题和练习题校验。所有接口都要求已登录。
+ * <p>包括今日题获取、每日打卡、历史查询和自主抽题。所有接口都要求已登录。
  */
 @RestController
 @RequestMapping("/api")
@@ -73,20 +73,17 @@ public class DailyProblemController {
     public ApiResponse<PracticeDrawResponse> draw(@RequestBody(required = false) PracticeDrawRequest request) {
         Integer minRating = request == null ? null : request.minRating();
         Integer maxRating = request == null ? null : request.maxRating();
-        return ApiResponse.ok(dailyProblemService.drawPracticeProblem(requireCurrentUser(), minRating, maxRating));
+        List<String> tags = request == null ? List.of() : request.tags();
+        return ApiResponse.ok(dailyProblemService.drawPracticeProblem(requireCurrentUser(), minRating, maxRating, tags));
     }
 
     /**
-     * 校验自主抽题提交。
-     *
-     * @param request 校验请求体，包含抽题记录 ID 和 submissionId。
-     * @return 校验结果，练习题不计分。
+     * 获取自主练习可选标签。
      */
-    @PostMapping("/practice/check")
-    public ApiResponse<CheckInResultResponse> checkPractice(@Valid @RequestBody PracticeCheckRequest request) {
-        return ApiResponse.ok(
-                dailyProblemService.checkPractice(requireCurrentUser(), request.drawId(), request.submissionId())
-        );
+    @GetMapping("/practice/tags")
+    public ApiResponse<List<String>> practiceTags() {
+        requireCurrentUser();
+        return ApiResponse.ok(dailyProblemService.getAvailablePracticeTags());
     }
 
     /**

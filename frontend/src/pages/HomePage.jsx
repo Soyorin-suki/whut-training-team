@@ -7,7 +7,7 @@ import ProblemCard from "../components/ui/ProblemCard";
 import Heatmap from "../components/ui/Heatmap";
 import UserAvatar from "../components/ui/UserAvatar";
 import { CardSkeleton } from "../components/ui/Skeleton";
-import { Activity, ArrowUpRight, Flame, Send, Trophy } from "lucide-react";
+import { Activity, ArrowUpRight, Flame, LoaderCircle, Send, Trophy } from "lucide-react";
 import CodeforcesOverview from "../components/profile/CodeforcesOverview";
 
 function getTodayStr() {
@@ -19,30 +19,69 @@ export default function HomePage() {
   const [data, setData] = useState(null);
   const [heatmapData, setHeatmapData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [heatmapLoading, setHeatmapLoading] = useState(true);
   const [error, setError] = useState("");
+  const [heatmapError, setHeatmapError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      try {
-        const [overview, heatmap] = await Promise.all([
-          getHomeOverview(10),
-          user?.id ? getHeatmap(user.id, 365) : Promise.resolve({ code: 200, data: [] }),
-        ]);
-        if (cancelled) return;
-        setData(overview);
-        if (heatmap?.code === 200) {
-          setHeatmapData(heatmap.data || []);
-        }
-      } catch (e) {
+    setLoading(true);
+    setHeatmapLoading(Boolean(user?.id));
+    setError("");
+    setHeatmapError("");
+
+    getHomeOverview(10)
+      .then((overview) => {
+        if (!cancelled) setData(overview);
+      })
+      .catch(() => {
         if (!cancelled) setError("加载首页数据失败");
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
+      });
+
+    if (user?.id) {
+      getHeatmap(user.id, 365)
+        .then((heatmap) => {
+          if (!cancelled && heatmap?.code === 200) {
+            setHeatmapData(heatmap.data || []);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setHeatmapError("热力图暂时无法加载");
+        })
+        .finally(() => {
+          if (!cancelled) setHeatmapLoading(false);
+        });
+    } else {
+      setHeatmapData([]);
+      setHeatmapLoading(false);
     }
-    load();
+
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!data?.problemPoolInitializing) return undefined;
+
+    let requesting = false;
+    const timer = window.setInterval(async () => {
+      if (requesting) return;
+      requesting = true;
+      try {
+        const overview = await getHomeOverview(10);
+        setData(overview);
+        setError("");
+      } catch {
+        // Keep the current overview visible and retry while the pool is initializing.
+      } finally {
+        requesting = false;
+      }
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [data?.problemPoolInitializing]);
 
   if (loading) {
     return (
@@ -108,15 +147,23 @@ export default function HomePage() {
       />
 
       {/* Heatmap */}
-      <section>
+      <section className="render-lazy">
         <h2 className="text-base font-semibold text-text-primary m-0 mb-2">打卡热力图</h2>
-        <div className="bg-white border border-border rounded-ui p-5 overflow-hidden">
-          <Heatmap data={heatmapData} />
-        </div>
+        {heatmapLoading ? (
+          <CardSkeleton />
+        ) : heatmapError ? (
+          <div className="bg-white border border-border rounded-ui p-6 text-sm text-text-secondary text-center">
+            {heatmapError}
+          </div>
+        ) : (
+          <div className="bg-white border border-border rounded-ui p-5 overflow-hidden">
+            <Heatmap data={heatmapData} />
+          </div>
+        )}
       </section>
 
       {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="render-lazy grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Today's Problems */}
         <section>
           <div className="flex items-center justify-between mb-2">
@@ -130,6 +177,11 @@ export default function HomePage() {
               {todayProblems.map((p, i) => (
                 <ProblemCard key={p.problemKey || i} problem={p} />
               ))}
+            </div>
+          ) : data?.problemPoolInitializing ? (
+            <div className="bg-white border border-border rounded-ui p-6 text-center text-sm text-text-secondary">
+              <LoaderCircle className="inline-block mr-2 animate-spin" size={16} />
+              首次启动正在初始化 Codeforces 题库，完成后会自动显示今日题目
             </div>
           ) : (
             <div className="bg-white border border-border rounded-ui p-6 text-center text-sm text-text-secondary">

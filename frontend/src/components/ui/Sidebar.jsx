@@ -2,13 +2,17 @@ import {
   CalendarDays,
   CalendarClock,
   ClipboardCheck,
+  ChartNoAxesCombined,
   Code2,
+  FolderOpen,
   House,
   Send,
   Settings2,
   Trophy,
   UserRound,
   Users,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
@@ -20,11 +24,13 @@ const NAV_ITEMS = [
   { to: "/contests", label: "近期比赛", icon: CalendarClock },
   { to: "/leaderboard", label: "排行榜", icon: Trophy },
   { to: "/practice", label: "自主练习", icon: Code2 },
+  { to: "/problem-lists", label: "我的题单", icon: FolderOpen },
   { to: "/push", label: "推题", icon: Send },
   { to: "/profile", label: "个人中心", icon: UserRound, requireAuth: true },
 ];
 
 const ADMIN_ITEMS = [
+  { to: "/admin/training", label: "训练看板", icon: ChartNoAxesCombined },
   { to: "/admin/daily", label: "题管理", icon: Settings2 },
   { to: "/admin/users", label: "用户管理", icon: Users },
   { to: "/admin/push", label: "推题审核", icon: ClipboardCheck },
@@ -51,8 +57,7 @@ export default function Sidebar({
   collapsed,
   mobileOpen,
   onClose,
-  onHoverStart,
-  onHoverEnd,
+  onToggle,
 }) {
   const { isAuthenticated, isAdmin } = useAuth();
   const location = useLocation();
@@ -65,8 +70,6 @@ export default function Sidebar({
       className={`app-sidebar ${collapsed ? "is-collapsed" : ""} ${
         mobileOpen ? "is-mobile-open" : ""
       }`}
-      onMouseEnter={onHoverStart}
-      onMouseLeave={onHoverEnd}
     >
       <div className="sidebar-brand">
         <Link to="/" className="sidebar-brand-link" onClick={onClose}>
@@ -116,6 +119,16 @@ export default function Sidebar({
           <span className="status-pulse" />
           <span className="sidebar-label">SYSTEM ONLINE</span>
         </div>
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={onToggle}
+          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+        >
+          {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          <span className="sidebar-label">{collapsed ? "展开侧边栏" : "收起侧边栏"}</span>
+        </button>
       </div>
     </aside>
   );

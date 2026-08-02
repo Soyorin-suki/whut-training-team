@@ -49,7 +49,7 @@ export async function refreshCodeforcesOverview(id) {
   const res = await http.post(
     `/api/users/${id}/codeforces-overview/refresh`,
     {},
-    { headers: authHeaders() }
+    { headers: authHeaders(), timeout: 45000 }
   );
   return res.data;
 }

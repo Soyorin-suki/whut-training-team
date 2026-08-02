@@ -20,10 +20,15 @@ export default function AuthFrame({ title, subtitle, children, footer }) {
         </Link>
         <div className="auth-intro-copy">
           <p className="eyebrow"><CircleDot size={13} /> PROGRAMMING LAB</p>
-          <h2>保持训练，<br />让进步可见。</h2>
-          <p>每日题目、训练记录与团队排名，集中在一个安静而专注的空间。</p>
+          <h2>WHUT-ACM<br />训练平台</h2>
+          <p className="auth-intro-affiliation">武汉理工大学ACM协会</p>
         </div>
         <p className="auth-footnote">WHUT ACM · EST. 2026</p>
+        <div className="auth-seam-decoration" aria-hidden="true">
+          <span className="auth-seam-node auth-seam-node-one" />
+          <span className="auth-seam-node auth-seam-node-two" />
+          <span className="auth-seam-node auth-seam-node-three" />
+        </div>
       </section>
 
       <section className="auth-card-wrap">

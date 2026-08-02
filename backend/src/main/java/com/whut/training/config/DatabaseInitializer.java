@@ -6,8 +6,7 @@ import java.io.IOException;
  * 数据库初始化器接口。
  *
  * <p>应用启动时由 Spring 调用，负责创建数据库结构。
- * 不同数据库有不同的实现（如 SQLite 用 PRAGMA 补列，MySQL 用 information_schema 检查）。
- * 实现类通过 {@code @ConditionalOnProperty} 按 {@code app.database.type} 自动选择。
+ * 当前运行时使用 MySQL，实现类通过 {@code app.database.type=mysql} 激活。
  */
 public interface DatabaseInitializer {
 

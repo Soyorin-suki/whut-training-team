@@ -17,11 +17,14 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 每日题与练习题服务实现。
@@ -32,16 +35,20 @@ import java.util.concurrent.ConcurrentHashMap;
 @ServiceLog
 public class DailyProblemServiceImpl implements DailyProblemService {
 
+    private static final Logger log = LoggerFactory.getLogger(DailyProblemServiceImpl.class);
+
     private final DailyProblemRepository dailyProblemRepository;
     private final CodeforcesApiService codeforcesApiService;
     private final com.whut.training.repository.UserRepository userRepository;
     private final TimeProvider timeProvider;
     private final Object generationLock = new Object();
     private final ConcurrentHashMap<Long, Object> userCheckinLocks = new ConcurrentHashMap<>();
+    private final AtomicBoolean problemSyncInProgress = new AtomicBoolean(false);
     private final int defaultMinRating;
     private final int defaultMaxRating;
     private final int noRepeatDays;
     private final int ratingThreshold;
+    private final boolean initialSyncEnabled;
 
     public DailyProblemServiceImpl(
             DailyProblemRepository dailyProblemRepository,
@@ -51,7 +58,8 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             @Value("${app.daily-problem.min-rating:1200}") int defaultMinRating,
             @Value("${app.daily-problem.max-rating:2000}") int defaultMaxRating,
             @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays,
-            @Value("${app.daily.ratingThreshold:1700}") int ratingThreshold
+            @Value("${app.daily.ratingThreshold:1700}") int ratingThreshold,
+            @Value("${app.daily-problem.initial-sync-enabled:true}") boolean initialSyncEnabled
     ) {
         this.dailyProblemRepository = dailyProblemRepository;
         this.codeforcesApiService = codeforcesApiService;
@@ -61,6 +69,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         this.defaultMaxRating = defaultMaxRating;
         this.noRepeatDays = noRepeatDays;
         this.ratingThreshold = ratingThreshold;
+        this.initialSyncEnabled = initialSyncEnabled;
     }
 
     /**
@@ -69,13 +78,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void initialSyncOnStartup() {
-        new Thread(() -> {
-            try {
-                syncProblemPool();
-            } catch (Exception ignore) {
-                // best effort — scheduler will retry later
-            }
-        }, "cf-initial-sync").start();
+        if (!initialSyncEnabled || dailyProblemRepository.countProblems() > 0) {
+            return;
+        }
+        startProblemPoolSyncAsync();
     }
 
     /**
@@ -93,7 +99,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Scheduled(cron = "${app.daily-problem.sync-cron:0 0 */6 * * *}", zone = "${app.daily-problem.zone:Asia/Shanghai}")
     public void syncProblemPoolByScheduler() {
-        syncProblemPool();
+        syncProblemPoolIfIdle();
     }
 
     /**
@@ -302,7 +308,7 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      * @return 抽题响应。
      */
     @Override
-    public PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating) {
+    public PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating, List<String> tags) {
         ensureProblemPoolAvailable();
         int resolvedMinRating = minRating == null ? defaultMinRating : minRating;
         int resolvedMaxRating = maxRating == null ? defaultMaxRating : maxRating;
@@ -310,8 +316,23 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             throw new BusinessException(400, "invalid rating range");
         }
 
-        CfProblem problem = dailyProblemRepository.findRandomProblem(resolvedMinRating, resolvedMaxRating)
-                .orElseThrow(() -> new BusinessException(404, "no problem available for this rating range"));
+        List<String> normalizedTags = tags == null ? List.of() : tags.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::trim)
+                .filter(tag -> !tag.isEmpty())
+                .map(tag -> tag.toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .toList();
+        if (normalizedTags.size() > 5 || normalizedTags.stream().anyMatch(tag -> tag.length() > 64)) {
+            throw new BusinessException(400, "标签选择无效，最多选择 5 个标签");
+        }
+
+        CfProblem problem = dailyProblemRepository.findRandomProblem(
+                        resolvedMinRating,
+                        resolvedMaxRating,
+                        normalizedTags
+                )
+                .orElseThrow(() -> new BusinessException(404, "没有符合当前难度和标签条件的题目"));
         UserPracticeDraw draw = dailyProblemRepository.insertPracticeDraw(user.getId(), timeProvider.today(), problem);
         return new PracticeDrawResponse(
                 draw.id(),
@@ -329,29 +350,9 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         );
     }
 
-    /**
-     * 校验练习题提交并落库。
-     *
-     * @param user         当前用户。
-     * @param drawId       抽题记录 ID。
-     * @param submissionId Codeforces 提交 ID。
-     * @return 校验结果。
-     */
     @Override
-    public CheckInResultResponse checkPractice(User user, Long drawId, Long submissionId) {
-        String codeforcesHandle = requireCodeforcesHandle(user);
-        UserPracticeDraw draw = dailyProblemRepository.findPracticeDrawById(drawId, user.getId())
-                .orElseThrow(() -> new BusinessException(404, "practice draw not found"));
-
-        CodeforcesApiService.SubmissionStatus submissionStatus = verifySubmission(
-                codeforcesHandle,
-                submissionId,
-                draw.contestId(),
-                draw.problemIndex()
-        );
-        dailyProblemRepository.updatePracticeCheck(drawId, user.getId(), submissionId, submissionStatus.verdict());
-        boolean accepted = "OK".equalsIgnoreCase(submissionStatus.verdict());
-        return new CheckInResultResponse("PRACTICE", accepted, submissionId, submissionStatus.verdict(), 0);
+    public List<String> getAvailablePracticeTags() {
+        return dailyProblemRepository.findAvailableProblemTags();
     }
 
     private String requireCodeforcesHandle(User user) {
@@ -383,8 +384,17 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     }
 
     @Override
-    public void ensureTodaySlots() {
-        ensureDailySlots(timeProvider.today(), false, "api-home");
+    public boolean ensureTodaySlots() {
+        try {
+            ensureDailySlots(timeProvider.today(), false, "api-home");
+            return true;
+        } catch (BusinessException ex) {
+            if (ex.getCode() != 503) {
+                throw ex;
+            }
+            log.debug("Problem pool is still initializing; home overview will be returned without daily slots");
+            return false;
+        }
     }
 
     @Override
@@ -543,9 +553,47 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         if (count > 0) {
             return;
         }
-        int synced = syncProblemPool();
-        if (synced == 0) {
-            throw new BusinessException(503, "failed to pull problems from codeforces");
+        startProblemPoolSyncAsync();
+        throw new BusinessException(503, "problem pool is initializing, please retry shortly");
+    }
+
+    /**
+     * 在后台触发一次题库同步。全局只允许一个同步任务运行，避免首次访问时重复拉取并阻塞请求线程。
+     */
+    private void startProblemPoolSyncAsync() {
+        if (!problemSyncInProgress.compareAndSet(false, true)) {
+            return;
+        }
+        Thread syncThread = new Thread(() -> {
+            try {
+                int synced = syncProblemPool();
+                if (synced > 0) {
+                    log.info("Codeforces problem pool sync completed: {} problems", synced);
+                } else {
+                    log.warn("Codeforces problem pool sync returned no problems; it will be retried later");
+                }
+            } catch (Exception ex) {
+                log.warn("Codeforces problem pool sync failed; it will be retried later", ex);
+            } finally {
+                problemSyncInProgress.set(false);
+            }
+        }, "cf-problem-sync");
+        syncThread.setDaemon(true);
+        syncThread.start();
+    }
+
+    /**
+     * 由定时任务同步题库；若已有同步任务则直接跳过本轮。
+     */
+    private int syncProblemPoolIfIdle() {
+        if (!problemSyncInProgress.compareAndSet(false, true)) {
+            log.debug("Codeforces problem pool sync skipped because another sync is in progress");
+            return 0;
+        }
+        try {
+            return syncProblemPool();
+        } finally {
+            problemSyncInProgress.set(false);
         }
     }
 
