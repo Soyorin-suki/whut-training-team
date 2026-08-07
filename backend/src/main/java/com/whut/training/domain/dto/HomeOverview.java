@@ -8,6 +8,7 @@ public class HomeOverview {
     private Object todayProblem;
     private Object todayPushProblem;
     private DailySubmissionSummary dailySubmissionSummary;
+    private boolean problemPoolInitializing;
 
     public int getTotalUsers() {
         return totalUsers;
@@ -47,6 +48,14 @@ public class HomeOverview {
 
     public void setDailySubmissionSummary(DailySubmissionSummary dailySubmissionSummary) {
         this.dailySubmissionSummary = dailySubmissionSummary;
+    }
+
+    public boolean isProblemPoolInitializing() {
+        return problemPoolInitializing;
+    }
+
+    public void setProblemPoolInitializing(boolean problemPoolInitializing) {
+        this.problemPoolInitializing = problemPoolInitializing;
     }
 
     public record DailySubmissionSummary(int todaySubmissions, int todayCheckedInUsers) {

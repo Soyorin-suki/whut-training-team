@@ -22,7 +22,7 @@ import java.util.Optional;
 /**
  * 每日题相关仓储。
  *
- * <p>负责题库同步、每日题落库、打卡记录和练习记录的读写。所有 SQL 都直连 SQLite，属于项目的数据核心层。
+ * <p>负责题库同步、每日题落库、打卡记录和练习记录的 MySQL 读写。
  */
 @Repository
 public class DailyProblemRepository {
@@ -206,17 +206,17 @@ public class DailyProblemRepository {
                             problem_key, contest_id, problem_index, name, rating, tags,
                             is_interactive, source_contest_id, solved_count, source_url, last_synced_at
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(problem_key) DO UPDATE SET
-                            contest_id = excluded.contest_id,
-                            problem_index = excluded.problem_index,
-                            name = excluded.name,
-                            rating = excluded.rating,
-                            tags = excluded.tags,
-                            is_interactive = excluded.is_interactive,
-                            source_contest_id = excluded.source_contest_id,
-                            solved_count = excluded.solved_count,
-                            source_url = excluded.source_url,
-                            last_synced_at = excluded.last_synced_at
+                        ON DUPLICATE KEY UPDATE
+                            contest_id = VALUES(contest_id),
+                            problem_index = VALUES(problem_index),
+                            name = VALUES(name),
+                            rating = VALUES(rating),
+                            tags = VALUES(tags),
+                            is_interactive = VALUES(is_interactive),
+                            source_contest_id = VALUES(source_contest_id),
+                            solved_count = VALUES(solved_count),
+                            source_url = VALUES(source_url),
+                            last_synced_at = VALUES(last_synced_at)
                         """,
                 problems,
                 300,
@@ -272,7 +272,7 @@ public class DailyProblemRepository {
                     WHERE d.problem_key = p.problem_key
                       AND d.date >= ?
                   )
-                ORDER BY RANDOM()
+                ORDER BY RAND()
                 LIMIT 1
                 """;
         List<CfProblem> rows = jdbcTemplate.query(sql, cfProblemRowMapper, minRating, maxRating, noRepeatAfterDate.toString());
@@ -287,6 +287,13 @@ public class DailyProblemRepository {
      * @return 随机题目。
      */
     public Optional<CfProblem> findRandomProblem(Integer minRating, Integer maxRating) {
+        return findRandomProblem(minRating, maxRating, List.of());
+    }
+
+    /**
+     * 按 rating 范围和标签随机抽题。多个标签采用 AND 语义，题目必须同时包含全部标签。
+     */
+    public Optional<CfProblem> findRandomProblem(Integer minRating, Integer maxRating, List<String> tags) {
         String sql = """
                 SELECT problem_key, contest_id, problem_index, name, rating, tags, is_interactive, source_contest_id, solved_count, source_url
                 FROM cf_problem p
@@ -294,11 +301,38 @@ public class DailyProblemRepository {
                   AND p.is_interactive = 0
                   AND p.rating IS NOT NULL
                   AND p.rating BETWEEN ? AND ?
-                ORDER BY RANDOM()
-                LIMIT 1
                 """;
-        List<CfProblem> rows = jdbcTemplate.query(sql, cfProblemRowMapper, minRating, maxRating);
+        StringBuilder filteredSql = new StringBuilder(sql);
+        List<Object> params = new java.util.ArrayList<>();
+        params.add(minRating);
+        params.add(maxRating);
+        if (tags != null) {
+            for (String tag : tags) {
+                filteredSql.append(" AND LOCATE(CONCAT(',', LOWER(?), ','), CONCAT(',', LOWER(COALESCE(p.tags, '')), ',')) > 0\n");
+                params.add(tag);
+            }
+        }
+        filteredSql.append(" ORDER BY RAND() LIMIT 1");
+        List<CfProblem> rows = jdbcTemplate.query(filteredSql.toString(), cfProblemRowMapper, params.toArray());
         return rows.stream().findFirst();
+    }
+
+    /**
+     * 从本地题库汇总可用于筛选的标签。
+     */
+    public List<String> findAvailableProblemTags() {
+        List<String> tagRows = jdbcTemplate.queryForList(
+                "SELECT tags FROM cf_problem WHERE source_contest_id IS NULL AND is_interactive = 0 AND tags IS NOT NULL AND tags <> ''",
+                String.class
+        );
+        return tagRows.stream()
+                .flatMap(row -> java.util.Arrays.stream(row.split(",")))
+                .map(String::trim)
+                .filter(tag -> !tag.isEmpty())
+                .map(tag -> tag.toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     /**
@@ -416,12 +450,12 @@ public class DailyProblemRepository {
                         INSERT INTO user_daily_slot_status (
                             user_id, date, slot, problem_key, submission_id, verdict, checked_at, score
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(user_id, date, problem_key) DO UPDATE SET
-                            slot = excluded.slot,
-                            submission_id = excluded.submission_id,
-                            verdict = excluded.verdict,
-                            checked_at = excluded.checked_at,
-                            score = excluded.score
+                        ON DUPLICATE KEY UPDATE
+                            slot = VALUES(slot),
+                            submission_id = VALUES(submission_id),
+                            verdict = VALUES(verdict),
+                            checked_at = VALUES(checked_at),
+                            score = VALUES(score)
                         """,
                 userId,
                 date.toString(),
@@ -477,11 +511,11 @@ public class DailyProblemRepository {
                 """
                         INSERT INTO user_daily_status (user_id, date, submission_id, verdict, checked_at, score)
                         VALUES (?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(user_id, date) DO UPDATE SET
-                            submission_id = excluded.submission_id,
-                            verdict = excluded.verdict,
-                            checked_at = excluded.checked_at,
-                            score = excluded.score
+                        ON DUPLICATE KEY UPDATE
+                            submission_id = VALUES(submission_id),
+                            verdict = VALUES(verdict),
+                            checked_at = VALUES(checked_at),
+                            score = VALUES(score)
                         """,
                 userId,
                 date.toString(),
@@ -523,6 +557,7 @@ public class DailyProblemRepository {
                                p.problem_key,
                                p.name,
                                p.rating,
+                               p.tags,
                                p.source_url,
                                p.is_redrawn,
                                CASE
@@ -541,7 +576,7 @@ public class DailyProblemRepository {
                                    ELSE NULL
                                END AS score
                         FROM (
-                            SELECT date, slot, problem_key, name, rating, source_url, is_redrawn
+                            SELECT date, slot, problem_key, name, rating, tags, source_url, is_redrawn
                             FROM daily_problem_slot
                             WHERE date BETWEEN ? AND ?
                             UNION ALL
@@ -550,6 +585,7 @@ public class DailyProblemRepository {
                                    d.problem_key,
                                    d.name,
                                    d.rating,
+                                   d.tags,
                                    d.source_url,
                                    0 AS is_redrawn
                             FROM daily_problem d
@@ -571,6 +607,7 @@ public class DailyProblemRepository {
                         rs.getString("problem_key"),
                         rs.getString("name"),
                         (Integer) rs.getObject("rating"),
+                        rs.getString("tags"),
                         rs.getString("source_url"),
                         rs.getInt("is_redrawn") != 0,
                         rs.getObject("submission_id") != null,
@@ -636,36 +673,6 @@ public class DailyProblemRepository {
         );
     }
 
-    /**
-     * 按抽题 ID 和用户 ID 查询抽题记录。
-     *
-     * @param drawId 抽题记录 ID。
-     * @param userId 用户 ID。
-     * @return 抽题记录。
-     */
-    public Optional<UserPracticeDraw> findPracticeDrawById(Long drawId, Long userId) {
-        List<UserPracticeDraw> rows = jdbcTemplate.query(
-                """
-                        SELECT id, user_id, draw_date, problem_key, contest_id, problem_index, name,
-                               rating, tags, source_url, submission_id, verdict
-                        FROM user_practice_draw
-                        WHERE id = ? AND user_id = ?
-                        """,
-                userPracticeDrawRowMapper,
-                drawId,
-                userId
-        );
-        return rows.stream().findFirst();
-    }
-
-    /**
-     * 更新练习题校验结果。
-     *
-     * @param drawId       抽题记录 ID。
-     * @param userId       用户 ID。
-     * @param submissionId 提交 ID。
-     * @param verdict      判题结果。
-     */
     public int countCheckedInUsersByDate(LocalDate date) {
         Integer c = jdbcTemplate.queryForObject(
                 """
@@ -734,21 +741,6 @@ public class DailyProblemRepository {
                 .map(item -> new DailyHeatmapItem(item.date(), item.score(),
                         maxScore > 0 ? Math.min(4, item.score() * 5 / maxScore) : 0))
                 .toList();
-    }
-
-    public void updatePracticeCheck(Long drawId, Long userId, Long submissionId, String verdict) {
-        jdbcTemplate.update(
-                """
-                        UPDATE user_practice_draw
-                        SET submission_id = ?, verdict = ?, checked_at = ?
-                        WHERE id = ? AND user_id = ?
-                        """,
-                submissionId,
-                verdict,
-                OffsetDateTime.now().toString(),
-                drawId,
-                userId
-        );
     }
 
     public List<UserPracticeDraw> findPracticeDrawsByUserId(Long userId, int limit) {

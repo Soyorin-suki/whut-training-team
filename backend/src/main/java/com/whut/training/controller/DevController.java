@@ -140,16 +140,12 @@ public class DevController {
             }
         }
 
-        int score = 0;
-        String matchedSlotName = "none";
-        if (matchedSlot != null) {
-            score = matchedSlot.rating() == null ? 0 : matchedSlot.rating();
-            matchedSlotName = matchedSlot.slot();
-        }
-
         if (matchedSlot == null) {
             return ApiResponse.fail(404, "daily slot not found");
         }
+
+        int score = matchedSlot.rating() == null ? 0 : matchedSlot.rating();
+        String matchedSlotName = matchedSlot.slot();
 
         // 检查是否已打卡
         var existingSlot = dailyProblemRepository.findUserDailySlotStatus(targetUserId, date, matchedSlot.problemKey());

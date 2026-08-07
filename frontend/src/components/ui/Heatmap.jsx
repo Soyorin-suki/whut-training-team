@@ -1,144 +1,144 @@
-/**
- * GitHub-style contribution heatmap — 365 days.
- * data: [{ date: "2026-05-23", score: 1500, colorLevel: 2 }, ...]
- */
-const COLOR_CLASSES = [
-  "bg-[#ebedf0]",    // level 0 - no activity
-  "bg-[#9be9a8]",    // level 1
-  "bg-[#40c463]",    // level 2
-  "bg-[#30a14e]",    // level 3
-  "bg-[#216e39]",    // level 4
-];
+import { memo } from "react";
 
-const CELL_SIZE = 11;
-const CELL_GAP = 2;
-const WEEK_WIDTH = CELL_SIZE + CELL_GAP; // 13px per week column
-const DAY_LABEL_WIDTH = 28; // matches ml-7 in grid row
-
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const LEVEL_COLORS = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
+const CELL_SIZE = 16;
+const CELL_GAP = 3;
+const WEEK_WIDTH = CELL_SIZE + CELL_GAP;
+const DAY_LABEL_WIDTH = 34;
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY_NAMES = ["", "Mon", "", "Wed", "", "Fri", ""];
 
-export default function Heatmap({ data }) {
-  // Build a map of date -> item
-  const dateMap = {};
-  if (data && data.length > 0) {
-    for (const item of data) {
-      dateMap[item.date] = item;
-    }
-  }
-
-  // Generate the last 365 days
+function Heatmap({ data }) {
+  const dateMap = Object.fromEntries((data || []).map((item) => [item.date, item]));
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const endDate = new Date(today);
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - 365);
-  // Align start to previous Sunday
   startDate.setDate(startDate.getDate() - startDate.getDay());
-
-  // Save for month calculation
   const startDateForMonths = new Date(startDate);
 
-  // Build week grid — stop generating days beyond endDate
   const weeks = [];
   const current = new Date(startDate);
-  while (current <= endDate) {
+  while (current <= today) {
     const week = [];
-    for (let d = 0; d < 7 && current <= endDate; d++) {
-      const dateStr = formatDate(current);
-      const item = dateMap[dateStr];
+    for (let dayIndex = 0; dayIndex < 7 && current <= today; dayIndex += 1) {
+      const date = formatDate(current);
+      const item = dateMap[date];
       week.push({
-        date: dateStr,
-        level: item ? item.colorLevel : 0,
-        score: item ? item.score : 0,
+        date,
+        level: Math.max(0, Math.min(4, item?.colorLevel ?? 0)),
+        score: item?.score ?? 0,
       });
       current.setDate(current.getDate() + 1);
     }
-    // Pad short last week to 7 slots (empty, not rendered)
-    while (week.length < 7) {
-      week.push(null);
-    }
+    while (week.length < 7) week.push(null);
     weeks.push(week);
   }
 
-  // Month spans — how many weeks each month covers
   const monthSpans = [];
-  for (let w = 0; w < weeks.length; ) {
+  for (let weekIndex = 0; weekIndex < weeks.length;) {
     const midDate = new Date(startDateForMonths);
-    midDate.setDate(midDate.getDate() + w * 7 + 3);
-    const m = midDate.getMonth();
+    midDate.setDate(midDate.getDate() + weekIndex * 7 + 3);
+    const month = midDate.getMonth();
     let count = 0;
-    while (w + count < weeks.length) {
+    while (weekIndex + count < weeks.length) {
       const checkDate = new Date(startDateForMonths);
-      checkDate.setDate(checkDate.getDate() + (w + count) * 7 + 3);
-      if (checkDate.getMonth() !== m) break;
-      count++;
+      checkDate.setDate(checkDate.getDate() + (weekIndex + count) * 7 + 3);
+      if (checkDate.getMonth() !== month) break;
+      count += 1;
     }
-    if (count === 0) count = 1;
-    monthSpans.push({ month: m, weeks: count });
-    w += count;
+    monthSpans.push({ month, weeks: Math.max(count, 1) });
+    weekIndex += Math.max(count, 1);
   }
 
+  const activeDays = (data || []).filter((item) => (item.score ?? 0) > 0).length;
+  const totalScore = (data || []).reduce((sum, item) => sum + (item.score ?? 0), 0);
+
   return (
-    <div className="inline-block overflow-x-auto max-w-full">
-      {/* Month labels — aligned with grid via spacer */}
-      <div className="flex mb-1 text-[10px] text-text-secondary" style={{ gap: CELL_GAP }}>
-        <div style={{ width: DAY_LABEL_WIDTH, flexShrink: 0 }} />
-        {monthSpans.map((ms, i) => (
-          <span
-            key={i}
-            className="whitespace-nowrap overflow-visible"
-            style={{ width: ms.weeks * WEEK_WIDTH - CELL_GAP, minWidth: 28 }}
-          >
-            {MONTH_NAMES[ms.month]}
-          </span>
-        ))}
+    <div className="heatmap-frame">
+      <div className="heatmap-summary">
+        <div>
+          <span>ACTIVE DAYS</span>
+          <strong>{activeDays}</strong>
+        </div>
+        <div>
+          <span>TOTAL SCORE</span>
+          <strong>{totalScore.toLocaleString()}</strong>
+        </div>
+        <p>过去 365 天的训练轨迹</p>
       </div>
 
-      <div className="flex">
-        {/* Day labels column */}
-        <div className="flex flex-col flex-shrink-0" style={{ width: DAY_LABEL_WIDTH, gap: CELL_GAP, paddingRight: CELL_GAP }}>
-          {DAY_NAMES.map((d, i) => (
-            <span key={i} className="text-[9px] text-text-secondary" style={{ lineHeight: `${CELL_SIZE}px`, height: CELL_SIZE }}>
-              {d}
-            </span>
-          ))}
-        </div>
+      <div className="heatmap-scroll">
+        <div
+          className="heatmap-canvas"
+          style={{ minWidth: DAY_LABEL_WIDTH + weeks.length * WEEK_WIDTH }}
+        >
+          <div className="heatmap-months" style={{ gap: CELL_GAP }}>
+            <div style={{ width: DAY_LABEL_WIDTH, flexShrink: 0 }} />
+            {monthSpans.map((span, index) => (
+              <span
+                key={`${span.month}-${index}`}
+                style={{ width: span.weeks * WEEK_WIDTH - CELL_GAP }}
+              >
+                {MONTH_NAMES[span.month]}
+              </span>
+            ))}
+          </div>
 
-        {/* Grid */}
-        <div className="flex" style={{ gap: CELL_GAP }}>
-          {weeks.map((week, wi) => (
-            <div key={wi} className="flex flex-col" style={{ gap: CELL_GAP }}>
-              {week.map((day, di) => (
-                <div
-                  key={di}
-                  style={{ width: CELL_SIZE, height: CELL_SIZE }}
-                  className={`rounded-[2px] ${
-                    day ? (day.level >= 0 ? COLOR_CLASSES[day.level] : "bg-transparent") : "bg-transparent"
-                  }`}
-                  title={day ? `${day.date}: ${day.score} 分` : ""}
-                />
+          <div className="heatmap-body">
+            <div
+              className="heatmap-days"
+              style={{ width: DAY_LABEL_WIDTH, gap: CELL_GAP, paddingRight: CELL_GAP }}
+            >
+              {DAY_NAMES.map((day, index) => (
+                <span
+                  key={index}
+                  style={{ lineHeight: `${CELL_SIZE}px`, height: CELL_SIZE }}
+                >
+                  {day}
+                </span>
               ))}
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-end gap-1 mt-1.5">
-        <span className="text-[9px] text-text-secondary">Less</span>
-        {COLOR_CLASSES.map((cls, i) => (
-          <div key={i} style={{ width: CELL_SIZE, height: CELL_SIZE }} className={`rounded-[2px] ${cls}`} />
-        ))}
-        <span className="text-[9px] text-text-secondary">More</span>
+            <div className="heatmap-weeks" style={{ gap: CELL_GAP }}>
+              {weeks.map((week, weekIndex) => (
+                <div key={weekIndex} className="heatmap-week" style={{ gap: CELL_GAP }}>
+                  {week.map((day, dayIndex) => (
+                    <span
+                      key={dayIndex}
+                      className={`heatmap-cell ${day ? "" : "is-empty"}`}
+                      style={{
+                        width: CELL_SIZE,
+                        height: CELL_SIZE,
+                        background: day ? LEVEL_COLORS[day.level] : "transparent",
+                      }}
+                      title={day ? `${day.date} · ${day.score} 分` : ""}
+                      aria-label={day ? `${day.date}，${day.score} 分` : undefined}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="heatmap-legend">
+            <span>LESS</span>
+            {LEVEL_COLORS.map((color) => (
+              <i key={color} style={{ width: CELL_SIZE, height: CELL_SIZE, background: color }} />
+            ))}
+            <span>MORE</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function formatDate(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export default memo(Heatmap);
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * 登录请求。
  *
- * @param username 用户名 / Codeforces handle。
+ * @param username 站内用户名。
  * @param password 登录密码。
  */
 public class LoginRequest {

@@ -1,6 +1,8 @@
 package com.whut.training.service;
 
 import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.CodeforcesBindingResponse;
+import com.whut.training.domain.dto.CodeforcesBindingStartRequest;
 import com.whut.training.domain.dto.UserUpdateRequest;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
@@ -10,7 +12,7 @@ import java.util.List;
 /**
  * 用户服务。
  *
- * <p>负责注册、管理员创建用户、资料更新以及用户查询。注册和更新时会与 Codeforces 账号信息联动。
+ * <p>负责注册、Codeforces 账号绑定、管理员创建用户、资料更新以及用户查询。
  */
 public interface UserService {
     /**
@@ -47,7 +49,7 @@ public interface UserService {
     /**
      * 按用户名查询用户。
      *
-     * @param username 用户名 / Codeforces handle。
+     * @param username 站内用户名。
      * @return 用户。
      */
     User getByUsername(String username);
@@ -60,4 +62,14 @@ public interface UserService {
      * @return 更新后的用户。
      */
     User updateProfile(Long userId, UserUpdateRequest request);
+
+    /**
+     * 开始 Codeforces 账号所有权验证。
+     */
+    CodeforcesBindingResponse startCodeforcesBinding(Long userId, CodeforcesBindingStartRequest request);
+
+    /**
+     * 检查验证提交并完成 Codeforces 账号绑定。
+     */
+    User finishCodeforcesBinding(Long userId);
 }

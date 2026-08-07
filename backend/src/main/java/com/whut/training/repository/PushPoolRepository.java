@@ -180,7 +180,8 @@ public class PushPoolRepository {
 
     public void setDailyPush(LocalDate date, Long pushId) {
         jdbcTemplate.update(
-                "INSERT OR REPLACE INTO daily_push (date, push_id) VALUES (?, ?)",
+                "INSERT INTO daily_push (date, push_id) VALUES (?, ?) " +
+                        "ON DUPLICATE KEY UPDATE push_id = VALUES(push_id)",
                 date.toString(), pushId
         );
     }

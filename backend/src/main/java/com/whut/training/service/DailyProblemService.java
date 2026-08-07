@@ -45,17 +45,14 @@ public interface DailyProblemService {
      * @param maxRating 最大难度。
      * @return 抽题结果。
      */
-    PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating);
+    PracticeDrawResponse drawPracticeProblem(User user, Integer minRating, Integer maxRating, List<String> tags);
 
     /**
-     * 校验自主抽题的提交。
+     * 获取当前本地题库中的所有可用标签。
      *
-     * @param user         当前用户。
-     * @param drawId       抽题记录 ID。
-     * @param submissionId 提交 ID。
-     * @return 校验结果。
+     * @return 已去重并排序的 Codeforces 标签。
      */
-    CheckInResultResponse checkPractice(User user, Long drawId, Long submissionId);
+    List<String> getAvailablePracticeTags();
 
     /**
      * 管理员重生成今日题。
@@ -79,7 +76,7 @@ public interface DailyProblemService {
     /**
      * 确保当日题位（easy/hard）已生成。供首页等场景在读取 slot 之前调用。
      */
-    void ensureTodaySlots();
+    boolean ensureTodaySlots();
 
     /**
      * 获取用户的自主练习历史。

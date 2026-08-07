@@ -18,6 +18,10 @@ backend/data/*.db
 backend/data/*.db-*
 backend/data/*.sqlite
 backend/data/*.sqlite3
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite3
 
 # Node
 **/node_modules/

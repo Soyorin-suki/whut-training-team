@@ -15,10 +15,17 @@ import com.whut.training.domain.enums.UserRole;
  * @param online                在线状态。
  * @param lastOnlineTimeSeconds 最近在线时间戳。
  * @param avatarUrl             头像地址。
+ * @param codeforcesHandle      已绑定的 Codeforces Handle。
+ * @param pendingCodeforcesHandle 待验证的 Codeforces Handle。
+ * @param codeforcesBindingStartedAtSeconds 绑定验证开始时间。
+ * @param displayName           对外展示用户名。
  * @param accessToken           访问令牌。
  * @param refreshToken          刷新令牌。
  */
 public record LoginResponse(Long id, String username, String email, UserRole role, Long uid, Integer codeforcesRating,
                             Integer maxRating, Boolean online, Long lastOnlineTimeSeconds, String avatarUrl,
+                            String codeforcesHandle, String pendingCodeforcesHandle,
+                            Long codeforcesBindingStartedAtSeconds,
+                            String displayName,
                             String accessToken, String refreshToken) {
 }

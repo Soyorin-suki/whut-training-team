@@ -23,22 +23,21 @@ export async function getDailyHistory(days = 0) {
   return res.data;
 }
 
-export async function drawPracticeProblem(minRating, maxRating) {
+export async function drawPracticeProblem(minRating, maxRating, tags = []) {
   const payload = {};
   if (minRating != null) payload.minRating = Number(minRating);
   if (maxRating != null) payload.maxRating = Number(maxRating);
+  if (tags.length > 0) payload.tags = tags;
   const res = await http.post("/api/practice/draw", payload, {
     headers: authHeaders(),
   });
   return res.data;
 }
 
-export async function checkPractice(drawId, submissionId) {
-  const res = await http.post(
-    "/api/practice/check",
-    { drawId, submissionId },
-    { headers: authHeaders() }
-  );
+export async function getPracticeTags() {
+  const res = await http.get("/api/practice/tags", {
+    headers: authHeaders(),
+  });
   return res.data;
 }
 

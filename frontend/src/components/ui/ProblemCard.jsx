@@ -1,6 +1,7 @@
 import { getRatingMeta, parseTags } from "../../utils/cf";
+import { ArrowUpRight } from "lucide-react";
 
-export default function ProblemCard({ problem }) {
+export default function ProblemCard({ problem, showTags = true }) {
   if (!problem) return null;
   const meta = getRatingMeta(problem.rating);
   const tags = parseTags(problem.tags);
@@ -26,7 +27,7 @@ export default function ProblemCard({ problem }) {
           {problem.rating ?? "未定级"}
         </span>
       </div>
-      {tags.length > 0 && (
+      {showTags && tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2.5">
           {tags.map((t) => (
             <span
@@ -40,12 +41,12 @@ export default function ProblemCard({ problem }) {
       )}
       {problem.sourceUrl && (
         <a
-          className="inline-block mt-2.5 text-xs text-text-secondary hover:text-text-primary underline"
+          className="inline-flex items-center gap-1 mt-3 text-xs text-text-secondary hover:text-text-primary"
           href={problem.sourceUrl}
           target="_blank"
           rel="noreferrer"
         >
-          在 Codeforces 打开 →
+          在 Codeforces 打开 <ArrowUpRight size={13} />
         </a>
       )}
     </article>

@@ -37,8 +37,10 @@
 - `GET /api/daily-problem/today`
 - `POST /api/daily-problem/check-in`
 - `GET /api/daily-problem/history`
+- `GET /api/practice/tags`
 - `POST /api/practice/draw`
-- `POST /api/practice/check`
+- `GET /api/problem-lists`
+- `POST /api/problem-lists`
 - `POST /api/push`
 - `GET /api/push`
 - `POST /api/push/{id}/submit`
@@ -65,15 +67,15 @@
 请求示例：
 ```json
 {
-  "username": "alice",
-  "email": "alice@example.com",
+  "username": "alice-account",
+  "displayName": "Alice",
   "password": "123456"
 }
 ```
 
 说明：
-- `username` 必须是有效 Codeforces handle（后端调用 `user.info` 校验）。
-- 可选字段：`codeforcesRating`, `maxRating`, `online`, `lastOnlineTimeSeconds`, `avatarUrl`。
+- `username` 是唯一登录账号，`displayName` 是对外展示的用户名。
+- 注册成功并登录后，通过独立绑定接口验证 Codeforces 账号所有权。
 
 ### 3.2 登录
 - `POST /api/auth/login`
@@ -103,7 +105,7 @@
 请求体：
 ```json
 {
-  "username": "new_handle",
+  "username": "new_username",
   "email": "new@example.com",
   "password": "newpass123",
   "displayName": "Alice",
@@ -115,12 +117,35 @@
 说明：
 - `password` 可不传或传空字符串（表示不修改密码）。非空密码长度需 `>= 6`。
 - `displayName` / `avatar` / `bio` 新增字段，可局部更新。
+- 修改 `username` 只修改站内登录名，不影响已绑定的 Codeforces Handle。
 
 ### 3.7 用户每日提交热图
 - `GET /api/users/{user_id}/daily-heatmap?days=180`
 - 返回：`[{date, score, colorLevel}]`
 - `colorLevel` 为 0-4，由得分相对强度自动计算。
 - 权限：本用户或管理员。
+
+### 3.8 开始绑定 Codeforces
+- `POST /api/users/{id}/codeforces-binding/start`
+- 权限：只能操作当前登录用户。
+
+请求体：
+```json
+{
+  "handle": "tourist"
+}
+```
+
+服务端记录验证开始时间。用户须在 2 分钟内使用该 Handle 向
+`https://codeforces.com/contest/1/problem/A` 提交一份产生
+`COMPILATION_ERROR` 的代码。
+
+### 3.9 完成 Codeforces 绑定
+- `POST /api/users/{id}/codeforces-binding/finish`
+- 权限：只能操作当前登录用户。
+
+服务端读取该 Handle 最近的提交；若发现验证开始后产生的 1A 编译错误提交，
+则保存绑定关系并同步 Codeforces rating、头像等资料。
 
 ## 4. 每日一题与练习题接口
 
@@ -207,24 +232,19 @@
 ```json
 {
   "minRating": 1200,
-  "maxRating": 1600
+  "maxRating": 1600,
+  "tags": ["dp", "greedy"]
 }
 ```
+- 多个标签采用 AND 语义，题目必须同时包含全部所选标签；最多选择 5 个。
+- `GET /api/practice/tags` 返回当前本地题库中已去重、排序的可用标签。
 
-### 4.5 练习题校验（不计分）
-- `POST /api/practice/check`
-- 请求体：
-```json
-{
-  "drawId": 1,
-  "submissionId": 123456789
-}
-```
+自主练习仅记录抽题历史，不进行提交校验；提交校验只保留在每日一题。
 
-### 4.6 管理员重生成今日题
+### 4.5 管理员重生成今日题
 - `POST /api/admin/daily-problem/regenerate`
 
-### 4.7 管理员单题重抽
+### 4.6 管理员单题重抽
 - `POST /api/admin/daily-problem/redraw?slot=easy|hard&confirm=false`
 - `slot` 必填（easy/hard），`confirm` 保留扩展。
 - 旧题标记 `is_redrawn=true`，新题插入；已打卡的旧题记录保留且计分有效。
@@ -318,14 +338,51 @@
 - `POST /api/admin/push/{id}/promote`
 - 将该题提升至推题队列最前。
 
-## 8. 角色管理接口
+## 8. 个人与共享题单接口
 
-### 8.1 查询角色列表
+- `GET /api/problem-lists`：返回当前用户自己的题单，以及管理员发布的全站共享题单。
+- `GET /api/problem-lists/{id}`：读取自己的题单或共享题单详情。
+- `POST /api/problem-lists`：创建一级题单。
+- `PATCH /api/problem-lists/{id}`：题单创建者修改名称、简介和共享状态。
+- `DELETE /api/problem-lists/{id}`：题单创建者删除题单及其全部题目。
+- `POST /api/problem-lists/{id}/items`：向自己的题单添加题目。
+- `PATCH /api/problem-lists/{id}/items/{itemId}`：修改题目快照。
+- `DELETE /api/problem-lists/{id}/items/{itemId}`：从题单移除题目。
+
+创建/修改题单请求体：
+```json
+{
+  "name": "区间 DP",
+  "description": "经典模型与易错题",
+  "shared": false
+}
+```
+
+添加题目请求体：
+```json
+{
+  "link": "https://codeforces.com/problemset/problem/607/B",
+  "title": "",
+  "problemKey": "",
+  "rating": null,
+  "tags": "",
+  "note": "重点理解状态转移"
+}
+```
+
+- 题单只有一级，不允许嵌套子题单。
+- 普通用户的题单仅自己可见；`ADMIN`、`SUPER_ADMIN` 可将自己创建的题单设为 `shared=true`，供所有登录成员只读查看。
+- 只有创建者可以修改题单和其中的题目，包括管理员也不能修改他人的共享题单。
+- 标准 Codeforces 链接会自动识别题号，并尝试从本地 `cf_problem` 补全标题、Rating 与标签；其他 OJ 链接需要填写标题。
+
+## 9. 角色管理接口
+
+### 9.1 查询角色列表
 - `GET /api/roles`
 - 权限：管理员及以上。
 - 返回基于枚举的角色列表：`[{name, code, description}]`。
 
-### 8.2 修改用户角色（超管理员）
+### 9.2 修改用户角色（超管理员）
 - `PUT /api/admin/users/{id}/role`
 - 权限：仅 SUPER_ADMIN。
 - 请求体：
@@ -337,7 +394,28 @@
 - 有效值：`USER`, `ADMIN`, `SUPER_ADMIN`。
 - 操作记录写入 `role_change_log` 表。
 
-## 9. 常见业务错误码
+### 9.3 现役队员训练看板
+- `GET /api/admin/training-dashboard`
+- 权限：`ADMIN`、`SUPER_ADMIN`。
+- 返回内容：现役人数、今日完成数、近 7 天活跃人数和打卡率、7 日趋势，以及每位现役队员的每日题、自主练习、积分和本地 Codeforces 快照摘要。
+- 该接口只读取数据库中的本地快照，不会在管理员打开看板时逐个请求 Codeforces。
+
+### 9.4 导出现役队员训练数据
+- `POST /api/admin/training-dashboard/export`
+- 权限：`ADMIN`、`SUPER_ADMIN`。
+- 请求体：
+```json
+{
+  "range": "WEEK",
+  "includeDaily": true,
+  "includeCodeforcesContests": true
+}
+```
+- `range` 可选 `WEEK`（最近 7 天）、`MONTH`（最近 30 天）、`ALL`（全部本地历史）。
+- 两个 `include*` 字段至少选择一个。接口返回 `.xlsx` 文件，其中始终包含“成员汇总”，并按选择增加“每日一题”“CF Rating比赛”工作表。
+- CF 比赛明细读取本地完整 Rating 历史；首次导出发现旧账号尚无历史时，会按成员自动调用 `user.rating` 补齐。成员在个人页刷新 Codeforces 资料时也会同步更新完整比赛历史。
+
+## 10. 常见业务错误码
 - `400` 参数错误、提交不匹配题目、文件格式不支持等
 - `401` 未登录、token 无效或过期
 - `403` 权限不足（非管理员、非本人）

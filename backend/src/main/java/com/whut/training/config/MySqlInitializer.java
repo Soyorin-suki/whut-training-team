@@ -1,0 +1,332 @@
+package com.whut.training.config;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.stereotype.Component;
+
+/**
+ * MySQL 表结构初始化器。
+ *
+ * <p>项目不再迁移旧 SQLite 数据；连接到空的 MySQL 数据库后会自动创建所需表和索引。
+ */
+@Component
+@ConditionalOnProperty(name = "app.database.type", havingValue = "mysql", matchIfMissing = true)
+public class MySqlInitializer implements DatabaseInitializer {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public MySqlInitializer(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    @PostConstruct
+    public void init() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    username VARCHAR(64) NOT NULL UNIQUE,
+                    email VARCHAR(255),
+                    password VARCHAR(255) NOT NULL,
+                    role VARCHAR(32),
+                    uid BIGINT,
+                    codeforces_rating INT,
+                    max_rating INT,
+                    is_online TINYINT(1),
+                    last_online_time_seconds BIGINT,
+                    avatar_url LONGTEXT,
+                    avatar_customized TINYINT(1) NOT NULL DEFAULT 0,
+                    total_points INT NOT NULL DEFAULT 0,
+                    display_name VARCHAR(100),
+                    bio TEXT,
+                    codeforces_handle VARCHAR(64),
+                    pending_codeforces_handle VARCHAR(64),
+                    codeforces_binding_started_at_seconds BIGINT,
+                    member_type VARCHAR(32) NOT NULL DEFAULT 'REGULAR',
+                    show_problem_tags TINYINT(1) NOT NULL DEFAULT 1,
+                    UNIQUE KEY uk_users_codeforces_handle (codeforces_handle)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS cf_problem (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    problem_key VARCHAR(64) NOT NULL UNIQUE,
+                    contest_id INT NOT NULL,
+                    problem_index VARCHAR(16) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    rating INT,
+                    tags TEXT,
+                    is_interactive TINYINT(1) NOT NULL DEFAULT 0,
+                    source_contest_id INT,
+                    solved_count INT,
+                    source_url TEXT NOT NULL,
+                    last_synced_at VARCHAR(64) NOT NULL,
+                    KEY idx_cf_problem_rating (rating),
+                    KEY idx_cf_problem_contest_idx (contest_id, problem_index)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS daily_problem (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    date VARCHAR(10) NOT NULL UNIQUE,
+                    problem_key VARCHAR(64) NOT NULL,
+                    contest_id INT NOT NULL,
+                    problem_index VARCHAR(16) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    rating INT,
+                    tags TEXT,
+                    source_url TEXT NOT NULL,
+                    generated_at VARCHAR(64) NOT NULL,
+                    generated_by VARCHAR(64) NOT NULL,
+                    KEY idx_daily_problem_date (date)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS daily_problem_slot (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    date VARCHAR(10) NOT NULL,
+                    slot VARCHAR(32) NOT NULL,
+                    problem_key VARCHAR(64) NOT NULL,
+                    contest_id INT NOT NULL,
+                    problem_index VARCHAR(16) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    rating INT,
+                    tags TEXT,
+                    source_url TEXT NOT NULL,
+                    generated_at VARCHAR(64) NOT NULL,
+                    generated_by VARCHAR(64) NOT NULL,
+                    is_redrawn TINYINT(1) NOT NULL DEFAULT 0,
+                    KEY idx_daily_problem_slot_date (date)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS user_daily_status (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    date VARCHAR(10) NOT NULL,
+                    submission_id BIGINT NOT NULL,
+                    verdict VARCHAR(64) NOT NULL,
+                    checked_at VARCHAR(64) NOT NULL,
+                    score INT NOT NULL DEFAULT 1,
+                    UNIQUE KEY uk_user_daily_status (user_id, date),
+                    KEY idx_user_daily_status_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS user_daily_slot_status (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    date VARCHAR(10) NOT NULL,
+                    slot VARCHAR(32) NOT NULL,
+                    problem_key VARCHAR(64) NOT NULL,
+                    submission_id BIGINT NOT NULL,
+                    verdict VARCHAR(64) NOT NULL,
+                    checked_at VARCHAR(64) NOT NULL,
+                    score INT NOT NULL DEFAULT 0,
+                    UNIQUE KEY uk_user_daily_slot_status (user_id, date, problem_key),
+                    KEY idx_user_daily_slot_status_user_date (user_id, date),
+                    KEY idx_user_daily_slot_status_problem (problem_key)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS user_practice_draw (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    draw_date VARCHAR(10) NOT NULL,
+                    problem_key VARCHAR(64) NOT NULL,
+                    contest_id INT NOT NULL,
+                    problem_index VARCHAR(16) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    rating INT,
+                    tags TEXT,
+                    source_url TEXT NOT NULL,
+                    drawn_at VARCHAR(64) NOT NULL,
+                    submission_id BIGINT,
+                    verdict VARCHAR(64),
+                    checked_at VARCHAR(64),
+                    KEY idx_user_practice_draw_user_date (user_id, draw_date)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS auth_token_session (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    access_token VARCHAR(255) NOT NULL UNIQUE,
+                    refresh_token VARCHAR(255) NOT NULL UNIQUE,
+                    access_expired_at_seconds BIGINT NOT NULL,
+                    refresh_expired_at_seconds BIGINT NOT NULL,
+                    created_at_seconds BIGINT NOT NULL,
+                    KEY idx_auth_token_session_user (user_id),
+                    KEY idx_auth_token_session_access_exp (access_expired_at_seconds),
+                    KEY idx_auth_token_session_refresh_exp (refresh_expired_at_seconds)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS push_pool (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    title VARCHAR(255) NOT NULL,
+                    link TEXT NOT NULL,
+                    description TEXT,
+                    submitter_id BIGINT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                    sort_order INT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    approved_by BIGINT,
+                    approved_at TIMESTAMP NULL,
+                    KEY idx_push_pool_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS push_submissions (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    push_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    submission_link TEXT NOT NULL,
+                    result_description TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_push_submissions_push (push_id),
+                    KEY idx_push_submissions_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS daily_push (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    date VARCHAR(10) NOT NULL UNIQUE,
+                    push_id BIGINT NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS role_change_log (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    target_user_id BIGINT NOT NULL,
+                    changed_by BIGINT NOT NULL,
+                    from_role VARCHAR(32),
+                    to_role VARCHAR(32) NOT NULL,
+                    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_role_change_target (target_user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS cf_profile_snapshot (
+                    user_id BIGINT PRIMARY KEY,
+                    codeforces_handle VARCHAR(64) NOT NULL,
+                    payload_json LONGTEXT NOT NULL,
+                    synced_at VARCHAR(64) NOT NULL,
+                    KEY idx_cf_profile_snapshot_handle (codeforces_handle)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS cf_rating_change (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    contest_id BIGINT NOT NULL,
+                    contest_name VARCHAR(255),
+                    contest_rank INT,
+                    old_rating INT,
+                    new_rating INT,
+                    rating_change INT,
+                    rating_update_time_seconds BIGINT,
+                    contest_url TEXT,
+                    UNIQUE KEY uk_cf_rating_change_user_contest (user_id, contest_id),
+                    KEY idx_cf_rating_change_time (rating_update_time_seconds),
+                    KEY idx_cf_rating_change_user_time (user_id, rating_update_time_seconds)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS problem_list (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    owner_user_id BIGINT NOT NULL,
+                    name VARCHAR(80) NOT NULL,
+                    description VARCHAR(500),
+                    is_shared TINYINT(1) NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    KEY idx_problem_list_owner (owner_user_id),
+                    KEY idx_problem_list_shared_updated (is_shared, updated_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS problem_list_item (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    list_id BIGINT NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    link VARCHAR(1000) NOT NULL,
+                    note VARCHAR(1000),
+                    problem_key VARCHAR(64),
+                    rating INT,
+                    tags TEXT,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_problem_list_item_list_order (list_id, sort_order, id),
+                    KEY idx_problem_list_item_problem_key (problem_key)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        // CREATE TABLE IF NOT EXISTS 不会给已有表补充新索引，因此单独执行轻量迁移。
+        ensureIndex(
+                "users",
+                "idx_users_total_points",
+                "ALTER TABLE users ADD INDEX idx_users_total_points (total_points)"
+        );
+        ensureIndex(
+                "users",
+                "idx_users_member_type",
+                "ALTER TABLE users ADD INDEX idx_users_member_type (member_type)"
+        );
+        ensureIndex(
+                "user_daily_status",
+                "idx_user_daily_status_date_user",
+                "ALTER TABLE user_daily_status ADD INDEX idx_user_daily_status_date_user (date, user_id)"
+        );
+        ensureIndex(
+                "user_daily_slot_status",
+                "idx_user_daily_slot_status_date_user",
+                "ALTER TABLE user_daily_slot_status ADD INDEX idx_user_daily_slot_status_date_user (date, user_id)"
+        );
+
+        jdbcTemplate.update("""
+                UPDATE push_pool SET status = 'PUBLISHED'
+                WHERE status = 'APPROVED' AND id IN (SELECT push_id FROM daily_push)
+                """);
+    }
+
+    private void ensureIndex(String tableName, String indexName, String createSql) {
+        Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) connection -> {
+            try (java.sql.ResultSet indexes = connection.getMetaData().getIndexInfo(
+                    connection.getCatalog(),
+                    null,
+                    tableName,
+                    false,
+                    false
+            )) {
+                while (indexes.next()) {
+                    String existingName = indexes.getString("INDEX_NAME");
+                    if (indexName.equalsIgnoreCase(existingName)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+        if (!Boolean.TRUE.equals(exists)) {
+            jdbcTemplate.execute(createSql);
+        }
+    }
+}

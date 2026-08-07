@@ -5,8 +5,11 @@ export function getRatingMeta(rating) {
   if (rating < 1600) return { label: "Specialist", color: "#03a89e" };
   if (rating < 1900) return { label: "Expert", color: "#0000ff" };
   if (rating < 2100) return { label: "Candidate Master", color: "#aa00aa" };
-  if (rating < 2400) return { label: "Master", color: "#ff8c00" };
-  return { label: "Grandmaster", color: "#ff0000" };
+  if (rating < 2300) return { label: "Master", color: "#ff8c00" };
+  if (rating < 2400) return { label: "International Master", color: "#ff8c00" };
+  if (rating < 2600) return { label: "Grandmaster", color: "#ff0000" };
+  if (rating < 3000) return { label: "International Grandmaster", color: "#ff0000" };
+  return { label: "Legendary Grandmaster", color: "#ff0000" };
 }
 
 export function parseTags(tags) {

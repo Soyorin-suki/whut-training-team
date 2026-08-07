@@ -85,6 +85,7 @@ export function buildAuthFromLogin(data) {
     user: {
       id: data.id ?? data.userId ?? null,
       username: data.username ?? "",
+      displayName: data.displayName ?? "",
       email: data.email ?? "",
       role: data.role ?? "",
       uid: data.uid ?? null,
@@ -93,12 +94,16 @@ export function buildAuthFromLogin(data) {
       online: data.online ?? null,
       lastOnlineTimeSeconds: lastOnline,
       lastOnlineTimeIso: lastOnlineIso,
-      avatarUrl: data.avatarUrl ?? ""
+      avatarUrl: data.avatarUrl ?? "",
+      codeforcesHandle: data.codeforcesHandle ?? null,
+      pendingCodeforcesHandle: data.pendingCodeforcesHandle ?? null,
+      codeforcesBindingStartedAtSeconds:
+        data.codeforcesBindingStartedAtSeconds ?? null
     }
   };
 }
 
 export function getUserInitial(user) {
-  const source = user?.username?.trim() || user?.email?.trim() || "?";
+  const source = user?.displayName?.trim() || user?.username?.trim() || user?.email?.trim() || "?";
   return source.charAt(0).toUpperCase();
 }
