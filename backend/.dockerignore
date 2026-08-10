@@ -1,0 +1,12 @@
+# 版本控制
+.git
+.gitignore
+
+# 编译产物（Dockerfile 里会重新构建）
+target/
+
+# 运行时数据与日志（通过 volume 挂载，无需进入构建上下文）
+data/
+logs/
+*.db
+*.db-*

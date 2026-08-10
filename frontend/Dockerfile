@@ -2,9 +2,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 利用缓存层
+# 利用缓存层 + BuildKit 缓存 npm 下载；npm ci 严格按 lock 文件安装，可复现
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # 复制源码并构建
 COPY . .

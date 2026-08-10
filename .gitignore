@@ -40,3 +40,7 @@ CLAUDE.md
 # agent
 AGENTS.md
 task.md
+
+# 本地部署覆盖配置，不入库（服务器专属：外部网络、端口、环境变量等）
+docker-compose.override.yml
+.env

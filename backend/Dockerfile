@@ -1,14 +1,15 @@
 FROM maven:3.9.5-eclipse-temurin-17 AS builder
 WORKDIR /app
 
-# 先复制 pom.xml 下载依赖以利用缓存
+# 先复制 pom.xml，利用 BuildKit 缓存 maven 依赖，避免每次构建重复下载
+# (需要 Docker 23+ / docker compose v2，默认已启用 BuildKit)
 COPY pom.xml .
-# 下载依赖 (失败忽略，仅为了缓存大部分依赖)
-RUN mvn dependency:go-offline || true
+# 预下载依赖（失败忽略：仅作为预热，真正的依赖缓存由下方 cache mount 保证）
+RUN --mount=type=cache,target=/root/.m2 mvn -B dependency:go-offline || true
 
 # 复制源码并编译
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn -B clean package -DskipTests
 
 # Stage 2: 运行环境
 # 使用 jammy (Ubuntu) 系列而不是 Alpine，因为 SQLite JDBC 的 native 驱动通常更适配 glibc 而非 musl libc
