@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Codeforces 外部 API 客户端。
@@ -31,23 +30,24 @@ import java.util.concurrent.TimeUnit;
 @ServiceLog
 public class CodeforcesApiService {
 
-    private static final long MIN_REQUEST_INTERVAL_NANOS = Duration.ofMillis(2100).toNanos();
-
     private final String baseUrl;
+    private final CodeforcesRequestCoordinator requestCoordinator;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Object requestRateLock = new Object();
-    private long nextRequestAllowedAtNanos;
 
     /**
      * 创建 Codeforces API 服务。
      *
      * @param baseUrl Codeforces API 基础地址。
      */
-    public CodeforcesApiService(@Value("${codeforces.base_url:https://codeforces.com/api}") String baseUrl) {
+    public CodeforcesApiService(
+            @Value("${codeforces.base_url:https://codeforces.com/api}") String baseUrl,
+            CodeforcesRequestCoordinator requestCoordinator
+    ) {
         this.baseUrl = baseUrl;
+        this.requestCoordinator = requestCoordinator;
     }
 
     /**
@@ -70,7 +70,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = sendWithRateLimit(request);
+            HttpResponse<String> response = sendWithRateLimit(request, CodeforcesRequestCoordinator.Priority.NORMAL);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -115,7 +115,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = sendWithRateLimit(request);
+            HttpResponse<String> response = sendWithRateLimit(request, CodeforcesRequestCoordinator.Priority.BACKGROUND);
             if (response.statusCode() != 200) {
                 return List.of();
             }
@@ -204,7 +204,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = sendWithRateLimit(request);
+            HttpResponse<String> response = sendWithRateLimit(request, CodeforcesRequestCoordinator.Priority.CHECK_IN);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -271,7 +271,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = sendWithRateLimit(request);
+            HttpResponse<String> response = sendWithRateLimit(request, CodeforcesRequestCoordinator.Priority.NORMAL);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -325,7 +325,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = sendWithRateLimit(request);
+            HttpResponse<String> response = sendWithRateLimit(request, CodeforcesRequestCoordinator.Priority.NORMAL);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -374,7 +374,7 @@ public class CodeforcesApiService {
                 .build();
 
         try {
-            HttpResponse<String> response = sendWithRateLimit(request);
+            HttpResponse<String> response = sendWithRateLimit(request, CodeforcesRequestCoordinator.Priority.NORMAL);
             if (response.statusCode() != 200) {
                 return Optional.empty();
             }
@@ -407,16 +407,12 @@ public class CodeforcesApiService {
     /**
      * 所有 Codeforces 请求共用启动间隔限制，避免不同业务并发触发官方限流。
      */
-    private HttpResponse<String> sendWithRateLimit(HttpRequest request)
+    private HttpResponse<String> sendWithRateLimit(HttpRequest request, CodeforcesRequestCoordinator.Priority priority)
             throws java.io.IOException, InterruptedException {
-        synchronized (requestRateLock) {
-            long waitNanos = nextRequestAllowedAtNanos - System.nanoTime();
-            if (waitNanos > 0) {
-                TimeUnit.NANOSECONDS.sleep(waitNanos);
-            }
-            nextRequestAllowedAtNanos = System.nanoTime() + MIN_REQUEST_INTERVAL_NANOS;
-        }
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return requestCoordinator.execute(
+                priority,
+                () -> httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+        );
     }
 
     /**

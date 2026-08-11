@@ -1,5 +1,5 @@
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
+import { ChevronDown, Link2, LogOut, Menu, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import UserAvatar from "./UserAvatar";
@@ -13,6 +13,7 @@ const PAGE_NAMES = {
   "/problem-lists": "我的题单",
   "/push": "推题",
   "/profile": "个人中心",
+  "/account-binding": "账号绑定",
   "/admin/training": "训练看板",
   "/admin/daily": "题目管理",
   "/admin/users": "用户管理",
@@ -65,6 +66,9 @@ export default function TopBar({ onMenuToggle }) {
               >
                 <Dropdown.Item className="dropdown-item" onClick={() => navigate("/profile")}>
                   <UserRound size={16} />个人资料
+                </Dropdown.Item>
+                <Dropdown.Item className="dropdown-item" onClick={() => navigate("/account-binding")}>
+                  <Link2 size={16} />账号绑定
                 </Dropdown.Item>
                 <Dropdown.Separator className="dropdown-separator" />
                 <Dropdown.Item className="dropdown-item" onClick={() => logout()}>

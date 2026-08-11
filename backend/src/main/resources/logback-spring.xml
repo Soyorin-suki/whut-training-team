@@ -2,6 +2,9 @@
 <configuration>
     <timestamp key="LOG_DATE" datePattern="yyyyMMdd"/>
     <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+    <springProperty name="LOG_PATH" source="logging.file.path" defaultValue="logs"/>
+    <springProperty name="LOG_MAX_HISTORY" source="app.logging.file.max-history" defaultValue="30"/>
+    <springProperty name="LOG_TOTAL_SIZE_CAP" source="app.logging.file.total-size-cap" defaultValue="2GB"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -10,15 +13,15 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/${LOG_DATE}/app.log</file>
+        <file>${LOG_PATH}/${LOG_DATE}/app.log</file>
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
         </encoder>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/${LOG_DATE}/app.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/${LOG_DATE}/app.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <maxFileSize>20MB</maxFileSize>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>2GB</totalSizeCap>
+            <maxHistory>${LOG_MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${LOG_TOTAL_SIZE_CAP}</totalSizeCap>
         </rollingPolicy>
     </appender>
 

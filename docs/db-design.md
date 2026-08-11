@@ -205,3 +205,21 @@
 
 系统启动时仅自动创建 SUPER_ADMIN 账号（账密见 `application.yml` 的 `superAdmin` 配置项）。
 普通 ADMIN 账号需用户自行注册后由超管提升权限。
+
+## 15) AtCoder 周赛跟踪
+
+`users` 新增账号绑定字段：`atcoder_handle`、`pending_atcoder_handle`、`atcoder_binding_token`、`atcoder_binding_started_at_seconds`、`atcoder_verified_at_seconds`；`atcoder_handle` 建唯一索引。
+
+### `atcoder_contest`
+保存 ABC 场次、开始/结束时间、官方链接、成员名单冻结状态、同步状态和最近同步时间。
+
+### `atcoder_requirement_member`
+按比赛冻结当时的现役成员名单和 AtCoder Handle 快照，记录是否必需、是否豁免及豁免原因。唯一键为 `(contest_id, user_id)`。
+
+### `atcoder_participation`
+保存成员的官方参赛记录、名次、Performance、Rating、赛时 AC 数、题目 ID、判定状态、数据源错误和检查时间。唯一键为 `(contest_id, user_id)`。
+
+### `atcoder_tracking_setting`
+单例配置表，保存最低赛时 AC 数、赛后最终判定等待小时数及最后修改管理员。
+
+现役名单在赛前保持动态更新，并在比赛开赛时冻结，避免漏掉赛前新转为现役的成员，也避免赛后身份变化改写历史要求。未绑定成员保留在快照中；之后完成绑定时查询会回退到当前已验证 Handle，使该场仍可继续同步。外部数据源失败使用 `DATA_ERROR`，不会直接写为 `ABSENT`。

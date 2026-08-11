@@ -16,6 +16,7 @@ import com.whut.training.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.net.URI;
 import java.time.Instant;
@@ -24,7 +25,8 @@ import java.util.UUID;
 /**
  * 认证服务实现。
  *
- * <p>负责账号密码登录、token 续期、退出登录以及登录时同步 Codeforces 头像与 UID。当前实现仍以明文密码对比为主，属于已知安全风险，后续应改为哈希存储与校验。
+ * <p>负责账号密码登录、token 续期、退出登录以及登录时同步 Codeforces 头像与 UID。
+ * 新密码使用 BCrypt；旧明文账号会在首次成功登录时自动升级。
  */
 @Service
 @ServiceLog
@@ -38,6 +40,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final AuthTokenSessionRepository authTokenSessionRepository;
     private final TimeProvider timeProvider;
+    private final PasswordEncoder passwordEncoder;
 
     public AuthServiceImpl(
             UserService userService,
@@ -45,6 +48,7 @@ public class AuthServiceImpl implements AuthService {
             UserRepository userRepository,
             AuthTokenSessionRepository authTokenSessionRepository,
             TimeProvider timeProvider,
+            PasswordEncoder passwordEncoder,
             @Value("${app.auth.access-token-ttl-seconds:1800}") long accessTokenTtlSeconds,
             @Value("${app.auth.refresh-token-ttl-seconds:604800}") long refreshTokenTtlSeconds
     ) {
@@ -53,6 +57,7 @@ public class AuthServiceImpl implements AuthService {
         this.userRepository = userRepository;
         this.authTokenSessionRepository = authTokenSessionRepository;
         this.timeProvider = timeProvider;
+        this.passwordEncoder = passwordEncoder;
         this.accessTokenTtlSeconds = accessTokenTtlSeconds;
         this.refreshTokenTtlSeconds = refreshTokenTtlSeconds;
     }
@@ -71,8 +76,17 @@ public class AuthServiceImpl implements AuthService {
         } catch (BusinessException ex) {
             throw new BusinessException(401, "invalid username or password");
         }
-        if (!user.getPassword().equals(request.getPassword())) {
+        String storedPassword = user.getPassword();
+        boolean encodedPassword = storedPassword != null && storedPassword.startsWith("$2");
+        boolean passwordMatches = encodedPassword
+                ? passwordEncoder.matches(request.getPassword(), storedPassword)
+                : storedPassword != null && storedPassword.equals(request.getPassword());
+        if (!passwordMatches) {
             throw new BusinessException(401, "invalid username or password");
+        }
+        if (!encodedPassword) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            userRepository.save(user);
         }
         syncAvatarFromCodeforcesOnLogin(user);
 

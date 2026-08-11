@@ -7,6 +7,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * 默认数据初始化器。
@@ -21,13 +22,16 @@ public class DataInitializer {
     private final UserRepository userRepository;
     private final String superAdminUsername;
     private final String superAdminPassword;
+    private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(UserRepository userRepository,
                            @Value("${superAdmin.username:superadmin}") String superAdminUsername,
-                           @Value("${superAdmin.password:superadmin123}") String superAdminPassword) {
+                           @Value("${superAdmin.password:superadmin123}") String superAdminPassword,
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.superAdminUsername = superAdminUsername;
         this.superAdminPassword = superAdminPassword;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostConstruct
@@ -37,7 +41,7 @@ public class DataInitializer {
                     null,
                     superAdminUsername,
                     superAdminUsername + "@whut.local",
-                    superAdminPassword,
+                    passwordEncoder.encode(superAdminPassword),
                     UserRole.SUPER_ADMIN
             ));
         }

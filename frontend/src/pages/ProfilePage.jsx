@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  finishCodeforcesBinding,
   getHeatmap,
   getUserById,
-  startCodeforcesBinding,
   updateMyProfile,
 } from "../api/user";
 import { getRatingMeta } from "../utils/cf";
@@ -13,7 +12,7 @@ import Heatmap from "../components/ui/Heatmap";
 import { CardSkeleton } from "../components/ui/Skeleton";
 import EmptyState from "../components/ui/EmptyState";
 import CodeforcesOverview from "../components/profile/CodeforcesOverview";
-import { Camera, Trash2 } from "lucide-react";
+import { Camera, Link2, Trash2 } from "lucide-react";
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -22,7 +21,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  // Edit mode
   const [editMode, setEditMode] = useState(false);
   const [editUsername, setEditUsername] = useState("");
   const [editEmail, setEditEmail] = useState("");
@@ -30,11 +28,6 @@ export default function ProfilePage() {
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editBio, setEditBio] = useState("");
   const [saving, setSaving] = useState(false);
-  const [bindingHandle, setBindingHandle] = useState("");
-  const [bindingActive, setBindingActive] = useState(false);
-  const [bindingExpiresAt, setBindingExpiresAt] = useState(null);
-  const [bindingLoading, setBindingLoading] = useState(false);
-  const [bindingMessage, setBindingMessage] = useState("");
   const [avatarSaving, setAvatarSaving] = useState(false);
 
   useEffect(() => {
@@ -49,18 +42,6 @@ export default function ProfilePage() {
         if (!cancelled) {
           if (userResp.code === 200) {
             setProfile(userResp.data);
-            setBindingHandle(
-              userResp.data?.pendingCodeforcesHandle
-                || userResp.data?.codeforcesHandle
-                || ""
-            );
-            if (userResp.data?.pendingCodeforcesHandle
-                && userResp.data?.codeforcesBindingStartedAtSeconds) {
-              setBindingActive(true);
-              setBindingExpiresAt(
-                userResp.data.codeforcesBindingStartedAtSeconds + 120
-              );
-            }
           }
           if (heatmapResp.code === 200) setHeatmapData(heatmapResp.data || []);
         }
@@ -114,56 +95,6 @@ export default function ProfilePage() {
       setMessage("更新请求失败");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleStartBinding() {
-    const handle = bindingHandle.trim();
-    if (!handle) {
-      setBindingMessage("请输入 Codeforces Handle");
-      return;
-    }
-    setBindingLoading(true);
-    setBindingMessage("");
-    try {
-      const resp = await startCodeforcesBinding(user.id, handle);
-      if (resp.code === 200) {
-        setBindingActive(true);
-        setBindingExpiresAt(resp.data.expiresAtSeconds);
-        setBindingMessage("验证已开始，请在 2 分钟内完成 CE 提交");
-      } else {
-        setBindingMessage(resp.message || "无法开始验证");
-      }
-    } catch {
-      setBindingMessage("绑定请求失败");
-    } finally {
-      setBindingLoading(false);
-    }
-  }
-
-  async function handleFinishBinding() {
-    setBindingLoading(true);
-    setBindingMessage("");
-    try {
-      const resp = await finishCodeforcesBinding(user.id);
-      if (resp.code === 200) {
-        setProfile(resp.data);
-        updateUser(resp.data);
-        setBindingHandle(resp.data.codeforcesHandle || "");
-        setBindingActive(false);
-        setBindingExpiresAt(null);
-        setBindingMessage("Codeforces 账号绑定成功");
-      } else {
-        if (resp.message?.includes("expired")) {
-          setBindingActive(false);
-          setBindingExpiresAt(null);
-        }
-        setBindingMessage(resp.message || "未检测到验证提交");
-      }
-    } catch {
-      setBindingMessage("验证请求失败");
-    } finally {
-      setBindingLoading(false);
     }
   }
 
@@ -306,6 +237,9 @@ export default function ProfilePage() {
               移除头像
             </button>
           )}
+          <Link to="/account-binding" className="mr-2 inline-flex items-center gap-1.5 rounded-ui border border-border bg-white px-3 py-1 text-sm font-semibold text-text-primary hover:bg-bg-secondary">
+            <Link2 size={15} />账号绑定
+          </Link>
           {!editMode ? (
             <button
               className="px-3 py-1 text-sm border border-border rounded-ui bg-white text-text-primary hover:bg-bg-secondary cursor-pointer"
@@ -339,79 +273,6 @@ export default function ProfilePage() {
         handle={currentProfile?.codeforcesHandle}
         canRefresh
       />
-
-      {/* Codeforces binding */}
-      <section className="bg-white border border-border rounded-ui p-4 space-y-3">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary m-0">
-            Codeforces 账号绑定
-          </h2>
-          <p className="text-xs text-text-secondary mt-1 mb-0">
-            {currentProfile?.codeforcesHandle
-              ? `当前已绑定 ${currentProfile.codeforcesHandle}，也可以重新验证后更换。`
-              : "绑定后才能校验每日一题的提交。"}
-          </p>
-        </div>
-
-        {bindingMessage && (
-          <p className={`text-sm rounded-ui px-3 py-2 m-0 ${
-            bindingMessage.includes("成功") || bindingMessage.includes("已开始")
-              ? "bg-[#f0fff0] text-success"
-              : "bg-[#fff0f0] text-error"
-          }`}>
-            {bindingMessage}
-          </p>
-        )}
-
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            className="flex-1 px-3 py-2 text-sm border border-border rounded-ui outline-none focus:border-text-primary"
-            value={bindingHandle}
-            onChange={(e) => setBindingHandle(e.target.value)}
-            placeholder="Codeforces Handle"
-            disabled={bindingLoading || bindingActive}
-          />
-          {!bindingActive ? (
-            <button
-              className="px-4 py-2 text-sm text-white bg-text-primary rounded-ui border-0 cursor-pointer disabled:opacity-50"
-              onClick={handleStartBinding}
-              disabled={bindingLoading}
-            >
-              {bindingLoading ? "请求中..." : "开始验证"}
-            </button>
-          ) : (
-            <button
-              className="px-4 py-2 text-sm text-white bg-text-primary rounded-ui border-0 cursor-pointer disabled:opacity-50"
-              onClick={handleFinishBinding}
-              disabled={bindingLoading}
-            >
-              {bindingLoading ? "检查中..." : "我已提交，完成绑定"}
-            </button>
-          )}
-        </div>
-
-        {bindingActive && (
-          <div className="text-sm text-text-secondary space-y-1">
-            <p className="m-0">
-              请使用 <strong>{bindingHandle}</strong> 在 2 分钟内向{" "}
-              <a
-                href="https://codeforces.com/contest/1/problem/A"
-                target="_blank"
-                rel="noreferrer"
-                className="text-text-primary underline"
-              >
-                Codeforces 1A
-              </a>{" "}
-              提交一份会产生 Compilation Error 的代码。
-            </p>
-            {bindingExpiresAt && (
-              <p className="m-0 text-xs">
-                验证截止时间：{new Date(bindingExpiresAt * 1000).toLocaleTimeString()}
-              </p>
-            )}
-          </div>
-        )}
-      </section>
 
       {/* Edit form */}
       {editMode && (
@@ -465,7 +326,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Heatmap */}
       <section>
         <h2 className="text-base font-semibold text-text-primary m-0 mb-2">打卡热力图</h2>
         <div className="bg-white border border-border rounded-ui p-5 overflow-hidden">

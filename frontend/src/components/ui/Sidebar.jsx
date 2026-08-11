@@ -13,6 +13,7 @@ import {
   Users,
   PanelLeftClose,
   PanelLeftOpen,
+  Link2,
   X,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { to: "/problem-lists", label: "我的题单", icon: FolderOpen },
   { to: "/push", label: "推题", icon: Send },
   { to: "/profile", label: "个人中心", icon: UserRound, requireAuth: true },
+  { to: "/account-binding", label: "账号绑定", icon: Link2, requireAuth: true },
 ];
 
 const ADMIN_ITEMS = [
@@ -78,7 +80,7 @@ export default function Sidebar({
           </span>
           <span className="sidebar-brand-copy">
             <strong>WHUT-ACM</strong>
-            <small>TRAINING LAB</small>
+            <small>训练平台</small>
           </span>
         </Link>
         <button className="sidebar-mobile-close" onClick={onClose} aria-label="关闭菜单">
@@ -87,7 +89,6 @@ export default function Sidebar({
       </div>
 
       <nav className="sidebar-nav" aria-label="主导航">
-        <div className="sidebar-section-label">WORKSPACE</div>
         {filteredItems.map((item) => (
           <NavLink
             key={item.to}
@@ -100,7 +101,6 @@ export default function Sidebar({
 
         {isAdmin && (
           <div className="sidebar-admin">
-            <div className="sidebar-section-label">ADMIN</div>
             {ADMIN_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
@@ -115,10 +115,6 @@ export default function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <div className="sidebar-status">
-          <span className="status-pulse" />
-          <span className="sidebar-label">SYSTEM ONLINE</span>
-        </div>
         <button
           type="button"
           className="sidebar-toggle"

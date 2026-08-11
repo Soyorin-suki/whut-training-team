@@ -37,6 +37,10 @@ pnpm-debug.log*
 frontend/.env.local
 frontend/.env.*.local
 
+# Deployment secrets
+backend/.env
+deploy/whut-acm.env
+
 # claude
 CLAUDE.md
 .claude

@@ -222,13 +222,7 @@ export default function ProblemListsPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="m-0 mb-2 font-mono text-[10px] font-bold tracking-[0.18em] text-text-secondary">
-            / PROBLEM COLLECTIONS
-          </p>
           <h1 className="m-0 text-2xl font-bold tracking-tight text-text-primary">我的题单</h1>
-          <p className="m-0 mt-2 text-sm text-text-secondary">
-            用一级题单整理专题训练；管理员还可以将自己的题单共享给所有成员。
-          </p>
         </div>
         <button type="button" className="button-primary inline-flex items-center gap-2" onClick={openCreateList}>
           <FolderPlus size={16} />创建题单
@@ -291,9 +285,7 @@ export default function ProblemListsPage() {
                       <h2 className="m-0 text-xl font-bold text-text-primary">{detail.list.name}</h2>
                       <VisibilityBadge shared={detail.list.shared} />
                     </div>
-                    <p className="m-0 mt-2 max-w-3xl text-sm leading-6 text-text-secondary">
-                      {detail.list.description || "这个题单还没有简介。"}
-                    </p>
+                    {detail.list.description && <p className="m-0 mt-2 max-w-3xl text-sm leading-6 text-text-secondary">{detail.list.description}</p>}
                     <p className="m-0 mt-3 text-[11px] text-text-secondary">
                       创建者：{detail.list.ownerDisplayName || detail.list.ownerUsername} · {detail.list.problemCount} 道题
                     </p>
@@ -313,10 +305,7 @@ export default function ProblemListsPage() {
 
               <div className="p-5 sm:p-6">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="m-0 text-base font-bold text-text-primary">题目</h3>
-                    <p className="m-0 mt-1 text-xs text-text-secondary">一级题单直接存放题目，不再嵌套子文件夹。</p>
-                  </div>
+                  <h3 className="m-0 text-base font-bold text-text-primary">题目</h3>
                   {detail.list.owner && (
                     <button type="button" onClick={openAddProblem} className="button-primary inline-flex items-center gap-2">
                       <Plus size={15} />添加题目
@@ -325,10 +314,7 @@ export default function ProblemListsPage() {
                 </div>
 
                 {detail.problems.length === 0 ? (
-                  <EmptyState
-                    title="题单还是空的"
-                    description={detail.list.owner ? "点击“添加题目”开始整理你的训练专题。" : "创建者还没有向这个共享题单添加题目。"}
-                  />
+                  <EmptyState title="题单还是空的" />
                 ) : (
                   <div className="space-y-3">
                     {detail.problems.map((problem, index) => (
@@ -347,7 +333,7 @@ export default function ProblemListsPage() {
             </>
           ) : (
             <div className="flex min-h-[520px] items-center justify-center p-6">
-              <EmptyState title="还没有题单" description="创建一个“区间 DP”之类的题单，然后把想练习的题目保存进来。" />
+              <EmptyState title="还没有题单" />
             </div>
           )}
         </main>
@@ -463,7 +449,7 @@ function DialogFrame({ open, onOpenChange, title, description, children }) {
         <Dialog.Overlay className="fixed inset-0 z-[80] bg-[#081627]/45 backdrop-blur-[2px]" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-[81] max-h-[90vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-white p-5 shadow-[0_28px_90px_rgba(8,22,39,0.25)] sm:p-6">
           <div className="flex items-start justify-between gap-4">
-            <div><Dialog.Title className="m-0 text-xl font-bold text-text-primary">{title}</Dialog.Title><Dialog.Description className="m-0 mt-1 text-xs leading-5 text-text-secondary">{description}</Dialog.Description></div>
+            <div><Dialog.Title className="m-0 text-xl font-bold text-text-primary">{title}</Dialog.Title><Dialog.Description className="sr-only">{description}</Dialog.Description></div>
             <Dialog.Close asChild><button type="button" className="rounded-lg p-2 text-text-secondary hover:bg-bg-secondary" aria-label="关闭"><X size={18} /></button></Dialog.Close>
           </div>
           {children}

@@ -1,4 +1,4 @@
-import { CircleDot, MoveUpRight } from "lucide-react";
+import { MoveUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function AuthFrame({ title, subtitle, children, footer }) {
@@ -19,11 +19,9 @@ export default function AuthFrame({ title, subtitle, children, footer }) {
           <span>WHUT-ACM</span>
         </Link>
         <div className="auth-intro-copy">
-          <p className="eyebrow"><CircleDot size={13} /> PROGRAMMING LAB</p>
           <h2>WHUT-ACM<br />训练平台</h2>
           <p className="auth-intro-affiliation">武汉理工大学ACM协会</p>
         </div>
-        <p className="auth-footnote">WHUT ACM · EST. 2026</p>
         <div className="auth-seam-decoration" aria-hidden="true">
           <span className="auth-seam-node auth-seam-node-one" />
           <span className="auth-seam-node auth-seam-node-two" />
@@ -33,7 +31,6 @@ export default function AuthFrame({ title, subtitle, children, footer }) {
 
       <section className="auth-card-wrap">
         <div className="auth-card">
-          <div className="auth-card-index">/ ACCOUNT</div>
           <div className="auth-card-heading">
             <h1>{title}</h1>
             <p>{subtitle}</p>

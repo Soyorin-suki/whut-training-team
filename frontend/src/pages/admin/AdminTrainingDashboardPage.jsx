@@ -18,6 +18,7 @@ import { exportTrainingDashboard, getTrainingDashboard } from "../../api/admin";
 import UserAvatar from "../../components/ui/UserAvatar";
 import EmptyState from "../../components/ui/EmptyState";
 import { getRatingMeta } from "../../utils/cf";
+import AtCoderAbcPanel from "../../components/admin/AtCoderAbcPanel";
 
 const FILTERS = [
   { value: "all", label: "全部成员" },
@@ -35,6 +36,7 @@ const EXPORT_RANGES = [
 const EXPORT_TYPES = [
   { key: "includeDaily", label: "每日一题", description: "题目、日期、完成状态、得分与提交记录" },
   { key: "includeCodeforcesContests", label: "CF Rating 比赛", description: "比赛名次、Rating 变化与比赛链接" },
+  { key: "includeAtCoderContests", label: "AtCoder ABC", description: "参赛状态、赛时 AC、名次、Performance 与豁免情况" },
 ];
 
 export default function AdminTrainingDashboardPage() {
@@ -51,6 +53,7 @@ export default function AdminTrainingDashboardPage() {
   const [exportTypes, setExportTypes] = useState({
     includeDaily: true,
     includeCodeforcesContests: true,
+    includeAtCoderContests: true,
   });
 
   async function load({ silent = false } = {}) {
@@ -141,9 +144,6 @@ export default function AdminTrainingDashboardPage() {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="m-0 mb-2 font-mono text-[10px] font-bold tracking-[0.18em] text-text-secondary">
-            / ACTIVE TEAM · {dashboard?.date || "-"}
-          </p>
           <h1 className="m-0 text-2xl font-bold tracking-tight text-text-primary">现役队员训练看板</h1>
           <p className="m-0 mt-2 text-sm text-text-secondary">集中查看每日题、自主练习和 Codeforces 训练概况。</p>
         </div>
@@ -179,7 +179,6 @@ export default function AdminTrainingDashboardPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard
-          index="01"
           label="现役队员"
           value={summary.activeMemberCount ?? 0}
           suffix="人"
@@ -187,7 +186,6 @@ export default function AdminTrainingDashboardPage() {
           hint="已标记为现役队员"
         />
         <SummaryCard
-          index="02"
           label="今日完成"
           value={summary.todayCompletedCount ?? 0}
           suffix={`/ ${summary.activeMemberCount ?? 0}`}
@@ -195,7 +193,6 @@ export default function AdminTrainingDashboardPage() {
           hint="至少完成一道每日题"
         />
         <SummaryCard
-          index="03"
           label="近 7 天活跃"
           value={summary.sevenDayActiveCount ?? 0}
           suffix="人"
@@ -203,6 +200,8 @@ export default function AdminTrainingDashboardPage() {
           hint={`整体打卡率 ${summary.sevenDayCompletionRate ?? 0}%`}
         />
       </section>
+
+      <AtCoderAbcPanel />
 
       <section>
         <div className="rounded-2xl border border-border bg-white p-5 shadow-[0_12px_36px_rgba(17,17,17,0.035)]">
@@ -360,6 +359,7 @@ export default function AdminTrainingDashboardPage() {
                     setExportTypes({
                       includeDaily: nextValue,
                       includeCodeforcesContests: nextValue,
+                      includeAtCoderContests: nextValue,
                     });
                     setExportError("");
                   }}
@@ -416,15 +416,14 @@ export default function AdminTrainingDashboardPage() {
   );
 }
 
-function SummaryCard({ index, label, value, suffix, icon: Icon, hint }) {
+function SummaryCard({ label, value, suffix, icon: Icon, hint }) {
   return (
     <div className="rounded-2xl border border-border bg-white p-4 shadow-[0_10px_30px_rgba(17,17,17,0.035)]">
       <div className="flex items-center justify-between text-text-secondary">
-        <span className="font-mono text-[10px] font-bold tracking-[0.14em]">{index}</span>
+        <span className="text-xs font-semibold">{label}</span>
         <Icon size={18} strokeWidth={1.8} />
       </div>
-      <p className="m-0 mt-5 text-xs font-semibold text-text-secondary">{label}</p>
-      <div className="mt-1 flex items-baseline gap-1.5">
+      <div className="mt-5 flex items-baseline gap-1.5">
         <strong className="text-2xl font-bold tracking-tight text-text-primary">{value}</strong>
         {suffix && <span className="text-xs font-semibold text-text-secondary">{suffix}</span>}
       </div>

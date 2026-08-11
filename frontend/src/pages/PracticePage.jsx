@@ -6,6 +6,7 @@ import {
   getPracticeTags,
 } from "../api/dailyProblem";
 import ProblemCard from "../components/ui/ProblemCard";
+import AddToProblemListButton from "../components/ui/AddToProblemListButton";
 import EmptyState from "../components/ui/EmptyState";
 import { ListSkeleton } from "../components/ui/Skeleton";
 
@@ -214,7 +215,12 @@ export default function PracticePage() {
       )}
 
       {/* Draw result */}
-      {drawResult?.problem && <ProblemCard problem={drawResult.problem} />}
+      {drawResult?.problem && (
+        <ProblemCard
+          problem={drawResult.problem}
+          actions={<AddToProblemListButton problem={drawResult.problem} />}
+        />
+      )}
 
       {/* Practice history */}
       <section>
@@ -248,13 +254,16 @@ export default function PracticePage() {
                     {item.drawDate}{item.drawnAt ? ` · ${item.drawnAt.slice(11, 19)}` : ""}
                   </p>
                 </div>
-                <button
-                  className="flex-shrink-0 px-2 py-1 text-xs text-error border border-border rounded hover:bg-[#fff0f0] cursor-pointer disabled:opacity-40 bg-white"
-                  onClick={() => handleDelete(item.drawId)}
-                  disabled={deletingId === item.drawId}
-                >
-                  {deletingId === item.drawId ? "..." : "删除"}
-                </button>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <AddToProblemListButton problem={item} compact />
+                  <button
+                    className="px-2 py-1 text-xs text-error border border-border rounded hover:bg-[#fff0f0] cursor-pointer disabled:opacity-40 bg-white"
+                    onClick={() => handleDelete(item.drawId)}
+                    disabled={deletingId === item.drawId}
+                  >
+                    {deletingId === item.drawId ? "..." : "删除"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -1,13 +1,13 @@
 import { getRatingMeta, parseTags } from "../../utils/cf";
 import { ArrowUpRight } from "lucide-react";
 
-export default function ProblemCard({ problem, showTags = true }) {
+export default function ProblemCard({ problem, showTags = true, actions = null }) {
   if (!problem) return null;
   const meta = getRatingMeta(problem.rating);
   const tags = parseTags(problem.tags);
 
   return (
-    <article className="bg-white border border-border rounded-ui p-4">
+    <article className="problem-card bg-white border border-border rounded-ui p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-semibold text-text-primary m-0 truncate">
@@ -39,15 +39,20 @@ export default function ProblemCard({ problem, showTags = true }) {
           ))}
         </div>
       )}
-      {problem.sourceUrl && (
-        <a
-          className="inline-flex items-center gap-1 mt-3 text-xs text-text-secondary hover:text-text-primary"
-          href={problem.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          在 Codeforces 打开 <ArrowUpRight size={13} />
-        </a>
+      {(problem.sourceUrl || actions) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          {problem.sourceUrl ? (
+            <a
+              className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary"
+              href={problem.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              在 Codeforces 打开 <ArrowUpRight size={13} />
+            </a>
+          ) : <span />}
+          {actions && <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>}
+        </div>
       )}
     </article>
   );

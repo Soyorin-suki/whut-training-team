@@ -83,7 +83,7 @@ class ProblemListServiceTest {
         ));
         when(repository.itemLinkExists(10L, link, null)).thenReturn(false);
         when(repository.addItem(10L, "Zuma", link, "重做", "607-B", 1800, "dp")).thenReturn(20L);
-        when(repository.findItems(10L)).thenReturn(List.of(item));
+        when(repository.findItem(10L, 20L)).thenReturn(Optional.of(item));
 
         var result = service.addItem(
                 owner,

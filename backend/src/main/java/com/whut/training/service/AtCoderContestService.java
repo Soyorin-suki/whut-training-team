@@ -10,6 +10,8 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +29,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.Supplier;
 
 /**
@@ -38,7 +42,7 @@ import java.util.function.Supplier;
  */
 @Service
 @ServiceLog
-public class AtCoderContestService {
+public class AtCoderContestService implements ContestService {
 
     private static final Logger log = LoggerFactory.getLogger(AtCoderContestService.class);
     private static final String USER_AGENT = "WHUT-ACM Training Platform/1.0";
@@ -56,24 +60,39 @@ public class AtCoderContestService {
     private final String nowcoderUrl;
     private final String luoguUrl;
     private final Duration cacheDuration;
+    private final Executor contestFetchExecutor;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private volatile CacheSnapshot cacheSnapshot = new CacheSnapshot(List.of(), Instant.EPOCH);
     private volatile Map<String, List<UpcomingContestItem>> lastSuccessfulByPlatform = Map.of();
 
+    AtCoderContestService(
+            String atCoderUrl,
+            long cacheMinutes,
+            String codeforcesUrl,
+            String nowcoderUrl,
+            String luoguUrl
+    ) {
+        this(atCoderUrl, cacheMinutes, codeforcesUrl, nowcoderUrl, luoguUrl, ForkJoinPool.commonPool());
+    }
+
+    @Autowired
     public AtCoderContestService(
             @Value("${contests.atcoder-url:https://atcoder.jp/contests/?lang=en}") String atCoderUrl,
             @Value("${contests.cache-minutes:15}") long cacheMinutes,
             @Value("${contests.codeforces-url:https://codeforces.com/api/contest.list?gym=false}") String codeforcesUrl,
             @Value("${contests.nowcoder-url:https://ac.nowcoder.com/acm/contest/vip-index}") String nowcoderUrl,
-            @Value("${contests.luogu-url:https://www.luogu.com.cn/contest/list}") String luoguUrl
+            @Value("${contests.luogu-url:https://www.luogu.com.cn/contest/list}") String luoguUrl,
+            @Qualifier("contestFetchExecutor") Executor contestFetchExecutor
     ) {
         this.atCoderUrl = atCoderUrl;
         this.codeforcesUrl = codeforcesUrl;
         this.nowcoderUrl = nowcoderUrl;
         this.luoguUrl = luoguUrl;
         this.cacheDuration = Duration.ofMinutes(Math.max(1, cacheMinutes));
+        this.contestFetchExecutor = contestFetchExecutor;
     }
 
+    @Override
     public List<UpcomingContestItem> getUpcomingContests() {
         Instant now = Instant.now();
         CacheSnapshot current = cacheSnapshot;
@@ -88,10 +107,14 @@ public class AtCoderContestService {
             }
 
             List<CompletableFuture<SourceResult>> tasks = List.of(
-                    CompletableFuture.supplyAsync(() -> fetchSource("CODEFORCES", this::fetchCodeforces)),
-                    CompletableFuture.supplyAsync(() -> fetchSource("ATCODER", this::fetchAtCoder)),
-                    CompletableFuture.supplyAsync(() -> fetchSource("NOWCODER", this::fetchNowcoder)),
-                    CompletableFuture.supplyAsync(() -> fetchSource("LUOGU", this::fetchLuogu))
+                    CompletableFuture.supplyAsync(
+                            () -> fetchSource("CODEFORCES", this::fetchCodeforces), contestFetchExecutor),
+                    CompletableFuture.supplyAsync(
+                            () -> fetchSource("ATCODER", this::fetchAtCoder), contestFetchExecutor),
+                    CompletableFuture.supplyAsync(
+                            () -> fetchSource("NOWCODER", this::fetchNowcoder), contestFetchExecutor),
+                    CompletableFuture.supplyAsync(
+                            () -> fetchSource("LUOGU", this::fetchLuogu), contestFetchExecutor)
             );
             List<SourceResult> results = tasks.stream().map(CompletableFuture::join).toList();
 
@@ -143,6 +166,15 @@ public class AtCoderContestService {
         return parseUpcomingContests(fetchDocument(atCoderUrl));
     }
 
+    /** Returns recent and upcoming AtCoder contests for persistent ABC requirement tracking. */
+    @Override
+    public List<UpcomingContestItem> getAtCoderContestWindow() {
+        return parseAtCoderContests(
+                fetchDocument(atCoderUrl),
+                "#contest-table-upcoming tbody tr, #contest-table-recent tbody tr"
+        );
+    }
+
     private List<UpcomingContestItem> fetchNowcoder() {
         return parseNowcoderContests(fetchDocument(nowcoderUrl), Instant.now());
     }
@@ -177,8 +209,12 @@ public class AtCoderContestService {
     }
 
     List<UpcomingContestItem> parseUpcomingContests(Document document) {
+        return parseAtCoderContests(document, "#contest-table-upcoming tbody tr");
+    }
+
+    private List<UpcomingContestItem> parseAtCoderContests(Document document, String rowSelector) {
         List<UpcomingContestItem> items = new ArrayList<>();
-        for (Element row : document.select("#contest-table-upcoming tbody tr")) {
+        for (Element row : document.select(rowSelector)) {
             List<Element> cells = row.select("td");
             Element contestLink = row.selectFirst("td:nth-child(2) a[href^='/contests/']");
             Element timeElement = row.selectFirst("time.fixtime-full");

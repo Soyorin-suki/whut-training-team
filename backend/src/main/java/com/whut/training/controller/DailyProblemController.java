@@ -21,14 +21,19 @@ import java.util.List;
 public class DailyProblemController {
 
     private final DailyProblemService dailyProblemService;
+    private final com.whut.training.service.DailyCheckInJobService dailyCheckInJobService;
 
     /**
      * 创建每日题控制器。
      *
      * @param dailyProblemService 每日题业务服务。
      */
-    public DailyProblemController(DailyProblemService dailyProblemService) {
+    public DailyProblemController(
+            DailyProblemService dailyProblemService,
+            com.whut.training.service.DailyCheckInJobService dailyCheckInJobService
+    ) {
         this.dailyProblemService = dailyProblemService;
+        this.dailyCheckInJobService = dailyCheckInJobService;
     }
 
     /**
@@ -48,8 +53,15 @@ public class DailyProblemController {
      * @return 打卡结果。
      */
     @PostMapping("/daily-problem/check-in")
-    public ApiResponse<CheckInResultResponse> checkIn(@Valid @RequestBody DailyProblemCheckInRequest request) {
-        return ApiResponse.ok(dailyProblemService.checkIn(requireCurrentUser(), request.submissionId()));
+    public ApiResponse<DailyCheckInJobResponse> checkIn(@Valid @RequestBody DailyProblemCheckInRequest request) {
+        return ApiResponse.ok(dailyCheckInJobService.submit(requireCurrentUser(), request.submissionId()));
+    }
+
+    /** Reads an asynchronous check-in without holding a servlet thread during the CF rate-limit wait. */
+    @GetMapping("/daily-problem/check-in/{jobId}")
+    public ApiResponse<DailyCheckInJobResponse> checkInStatus(@PathVariable String jobId) {
+        User user = requireCurrentUser();
+        return ApiResponse.ok(dailyCheckInJobService.get(jobId, user.getId()));
     }
 
     /**

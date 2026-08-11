@@ -45,13 +45,74 @@ class MySqlRepositoryCompatibilityTest {
     @Autowired
     private ProblemListRepository problemListRepository;
 
+    @Autowired
+    private AtCoderTrackingRepository atCoderTrackingRepository;
+
+    @Autowired
+    private AuthTokenSessionRepository authTokenSessionRepository;
+
     @Test
     void supportsRegistrationAndAllMySqlUpserts() {
+        User superAdmin = new User(null, "ranking-superadmin", null, "password", UserRole.SUPER_ADMIN);
+        superAdmin.setDisplayName("Ranking Superadmin");
+        superAdmin.setTotalPoints(99_999);
+        userRepository.save(superAdmin);
+
         User user = new User(null, "mysql-user", null, "password", UserRole.USER);
         user.setDisplayName("MySQL User");
+        user.setTotalPoints(100);
+        user.setAtcoderHandle("mysql_atcoder");
+        user.setAtcoderVerifiedAtSeconds(1_754_006_400L);
         userRepository.save(user);
         assertThat(user.getId()).isNotNull();
+        authTokenSessionRepository.save(new AuthTokenSessionRepository.AuthTokenSession(
+                user.getId(), "raw-access-token", "raw-refresh-token", 2_000L, 3_000L
+        ));
+        assertThat(authTokenSessionRepository.findByAccessToken("raw-access-token"))
+                .get()
+                .satisfies(session -> {
+                    assertThat(session.accessToken()).isNotEqualTo("raw-access-token");
+                    assertThat(session.refreshToken()).isNotEqualTo("raw-refresh-token");
+                });
+        assertThat(authTokenSessionRepository.findByRefreshToken("raw-refresh-token")).isPresent();
+        assertThat(userRepository.countRankedUsers()).isLessThan(userRepository.countAll());
+        assertThat(userRepository.findTopByTotalPoints(10, 0))
+                .extracting(item -> item.getUserId())
+                .contains(user.getId())
+                .doesNotContain(superAdmin.getId());
+        assertThat(userRepository.findByAtcoderHandle("MYSQL_ATCODER"))
+                .get()
+                .satisfies(saved -> {
+                    assertThat(saved.getAtcoderHandle()).isEqualTo("mysql_atcoder");
+                    assertThat(saved.getAtcoderVerifiedAtSeconds()).isEqualTo(1_754_006_400L);
+                });
         userRepository.updateMemberType(user.getId(), MemberType.ACTIVE_TEAM);
+
+        atCoderTrackingRepository.upsertContest(
+                "abc460", "AtCoder Beginner Contest 460", 1_780_148_400L, 1_780_155_600L,
+                "https://atcoder.jp/contests/abc460"
+        );
+        atCoderTrackingRepository.prepareActiveMembers("abc460");
+        assertThat(atCoderTrackingRepository.findRequirements("abc460"))
+                .singleElement()
+                .extracting(AtCoderTrackingRepository.RequirementRow::atcoderHandle)
+                .isEqualTo("mysql_atcoder");
+        atCoderTrackingRepository.freezeActiveMembers("abc460");
+        atCoderTrackingRepository.upsertParticipation(
+                "abc460", user.getId(), true, 321, 1800, true,
+                1700, 1750, 2, "abc460_a,abc460_b", "COMPLETED", null
+        );
+        assertThat(atCoderTrackingRepository.findRequirements("abc460"))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.atcoderHandle()).isEqualTo("mysql_atcoder");
+                    assertThat(row.status()).isEqualTo("COMPLETED");
+                    assertThat(row.acCount()).isEqualTo(2);
+                });
+        assertThat(atCoderTrackingRepository.findExportRows(1_700_000_000L))
+                .singleElement()
+                .extracting(AtCoderTrackingRepository.AtCoderExportRow::contestId)
+                .isEqualTo("abc460");
 
         CfProblem first = new CfProblem(
                 "100-A", 100, "A", "First", 1200, "math", false,

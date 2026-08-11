@@ -5,6 +5,10 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,8 +47,8 @@ public class AuthTokenSessionRepository {
         jdbcTemplate.update(
                 "INSERT INTO auth_token_session (user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds, created_at_seconds) VALUES (?, ?, ?, ?, ?, ?)",
                 session.userId(),
-                session.accessToken(),
-                session.refreshToken(),
+                tokenHash(session.accessToken()),
+                tokenHash(session.refreshToken()),
                 session.accessExpiredAtSeconds(),
                 session.refreshExpiredAtSeconds(),
                 Instant.now().getEpochSecond()
@@ -59,9 +63,10 @@ public class AuthTokenSessionRepository {
      */
     public Optional<AuthTokenSession> findByAccessToken(String accessToken) {
         List<AuthTokenSession> rows = jdbcTemplate.query(
-                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds FROM auth_token_session WHERE access_token = ?",
+                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds FROM auth_token_session WHERE access_token IN (?, ?)",
                 rowMapper,
-                accessToken
+                accessToken,
+                tokenHash(accessToken)
         );
         return rows.stream().findFirst();
     }
@@ -74,9 +79,10 @@ public class AuthTokenSessionRepository {
      */
     public Optional<AuthTokenSession> findByRefreshToken(String refreshToken) {
         List<AuthTokenSession> rows = jdbcTemplate.query(
-                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds FROM auth_token_session WHERE refresh_token = ?",
+                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds FROM auth_token_session WHERE refresh_token IN (?, ?)",
                 rowMapper,
-                refreshToken
+                refreshToken,
+                tokenHash(refreshToken)
         );
         return rows.stream().findFirst();
     }
@@ -88,7 +94,11 @@ public class AuthTokenSessionRepository {
      * @return 删除条数。
      */
     public int deleteByAccessToken(String accessToken) {
-        return jdbcTemplate.update("DELETE FROM auth_token_session WHERE access_token = ?", accessToken);
+        return jdbcTemplate.update(
+                "DELETE FROM auth_token_session WHERE access_token IN (?, ?)",
+                accessToken,
+                tokenHash(accessToken)
+        );
     }
 
     /**
@@ -98,7 +108,11 @@ public class AuthTokenSessionRepository {
      * @return 删除条数。
      */
     public int deleteByRefreshToken(String refreshToken) {
-        return jdbcTemplate.update("DELETE FROM auth_token_session WHERE refresh_token = ?", refreshToken);
+        return jdbcTemplate.update(
+                "DELETE FROM auth_token_session WHERE refresh_token IN (?, ?)",
+                refreshToken,
+                tokenHash(refreshToken)
+        );
     }
 
     /**
@@ -113,6 +127,18 @@ public class AuthTokenSessionRepository {
                 epochSeconds,
                 epochSeconds
         );
+    }
+
+    private String tokenHash(String token) {
+        if (token == null || token.isBlank()) {
+            return "";
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available", ex);
+        }
     }
 
     /**

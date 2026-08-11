@@ -74,3 +74,37 @@ export async function exportTrainingDashboard(payload) {
   }
   return { blob: res.data, filename };
 }
+
+export async function getAtCoderAbcDashboard(contestId) {
+  const res = await http.get("/api/admin/atcoder-abc", {
+    headers: authHeaders(),
+    params: contestId ? { contestId } : undefined,
+  });
+  return res.data;
+}
+
+export async function refreshAtCoderAbcDashboard(contestId) {
+  const res = await http.post("/api/admin/atcoder-abc/refresh", {}, {
+    headers: authHeaders(),
+    params: contestId ? { contestId } : undefined,
+    timeout: 120000,
+  });
+  return res.data;
+}
+
+export async function updateAtCoderTrackingSetting(payload, contestId) {
+  const res = await http.patch("/api/admin/atcoder-abc/setting", payload, {
+    headers: authHeaders(),
+    params: contestId ? { contestId } : undefined,
+  });
+  return res.data;
+}
+
+export async function updateAtCoderExemption(contestId, userId, payload) {
+  const res = await http.patch(
+    `/api/admin/atcoder-abc/${contestId}/members/${userId}/exemption`,
+    payload,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}

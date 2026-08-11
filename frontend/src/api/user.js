@@ -31,6 +31,23 @@ export async function getHeatmap(userId, days = 180) {
   return res.data;
 }
 
+export async function getFunCheckIns(userId, days = 365) {
+  const res = await http.get(`/api/users/${userId}/fun-check-ins`, {
+    headers: authHeaders(),
+    params: { days },
+  });
+  return res.data;
+}
+
+export async function funCheckInToday(userId) {
+  const res = await http.post(
+    `/api/users/${userId}/fun-check-ins/today`,
+    {},
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
 export async function getPublicProfile(id) {
   const res = await http.get(`/api/users/${id}/public-profile`, {
     headers: authHeaders(),
@@ -66,6 +83,24 @@ export async function startCodeforcesBinding(userId, handle) {
 export async function finishCodeforcesBinding(userId) {
   const res = await http.post(
     `/api/users/${userId}/codeforces-binding/finish`,
+    {},
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function startAtCoderBinding(userId, handle) {
+  const res = await http.post(
+    `/api/users/${userId}/atcoder-binding/start`,
+    { handle },
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+export async function finishAtCoderBinding(userId) {
+  const res = await http.post(
+    `/api/users/${userId}/atcoder-binding/finish`,
     {},
     { headers: authHeaders() }
   );

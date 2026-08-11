@@ -12,7 +12,25 @@ export async function checkInToday(submissionId) {
     { submissionId },
     { headers: authHeaders() }
   );
-  return res.data;
+  if (res.data?.code !== 200 || !res.data?.data?.jobId) return res.data;
+
+  let job = res.data.data;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (job.status === "SUCCEEDED") {
+      return { code: 200, message: job.message || "success", data: job.result };
+    }
+    if (job.status === "FAILED") {
+      return { code: job.errorCode || 400, message: job.message || "校验失败", data: null };
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    const statusResponse = await http.get(
+      `/api/daily-problem/check-in/${encodeURIComponent(job.jobId)}`,
+      { headers: authHeaders() }
+    );
+    if (statusResponse.data?.code !== 200) return statusResponse.data;
+    job = statusResponse.data.data;
+  }
+  return { code: 503, message: "校验排队时间较长，请稍后再次查看今日状态", data: null };
 }
 
 export async function getDailyHistory(days = 0) {

@@ -15,6 +15,13 @@ function shouldSkipRefresh(config) {
     || url.includes("/api/auth/refresh");
 }
 
+function resolveApiError(error) {
+  if (error?.response) {
+    return Promise.resolve(error.response);
+  }
+  return Promise.reject(error);
+}
+
 async function refreshAccessToken() {
   const auth = getStoredAuth();
   const refreshToken = auth?.tokens?.refreshToken;
@@ -49,7 +56,7 @@ http.interceptors.response.use(
     const status = error?.response?.status;
 
     if (!config || status !== 401 || config._retry || shouldSkipRefresh(config)) {
-      return Promise.reject(error);
+      return resolveApiError(error);
     }
 
     config._retry = true;
@@ -68,7 +75,7 @@ http.interceptors.response.use(
     } catch (refreshError) {
       clearStoredAuth();
       window.dispatchEvent(new CustomEvent("auth:invalid"));
-      return Promise.reject(refreshError);
+      return resolveApiError(error);
     }
   }
 );

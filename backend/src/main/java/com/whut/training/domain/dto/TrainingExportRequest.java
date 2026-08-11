@@ -6,7 +6,8 @@ package com.whut.training.domain.dto;
 public record TrainingExportRequest(
         String range,
         boolean includeDaily,
-        boolean includeCodeforcesContests
+        boolean includeCodeforcesContests,
+        boolean includeAtCoderContests
 ) {
     public ExportRange exportRange() {
         if (range == null || range.isBlank()) return ExportRange.WEEK;

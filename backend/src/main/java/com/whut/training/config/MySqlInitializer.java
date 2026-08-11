@@ -44,9 +44,15 @@ public class MySqlInitializer implements DatabaseInitializer {
                     codeforces_handle VARCHAR(64),
                     pending_codeforces_handle VARCHAR(64),
                     codeforces_binding_started_at_seconds BIGINT,
+                    atcoder_handle VARCHAR(64),
+                    pending_atcoder_handle VARCHAR(64),
+                    atcoder_binding_token VARCHAR(64),
+                    atcoder_binding_started_at_seconds BIGINT,
+                    atcoder_verified_at_seconds BIGINT,
                     member_type VARCHAR(32) NOT NULL DEFAULT 'REGULAR',
                     show_problem_tags TINYINT(1) NOT NULL DEFAULT 1,
-                    UNIQUE KEY uk_users_codeforces_handle (codeforces_handle)
+                    UNIQUE KEY uk_users_codeforces_handle (codeforces_handle),
+                    UNIQUE KEY uk_users_atcoder_handle (atcoder_handle)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
 
@@ -133,6 +139,23 @@ public class MySqlInitializer implements DatabaseInitializer {
                     UNIQUE KEY uk_user_daily_slot_status (user_id, date, problem_key),
                     KEY idx_user_daily_slot_status_user_date (user_id, date),
                     KEY idx_user_daily_slot_status_problem (problem_key)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS user_fun_check_in (
+                    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    user_id BIGINT NOT NULL,
+                    check_in_date VARCHAR(10) NOT NULL,
+                    fortune_key VARCHAR(32) NOT NULL,
+                    fortune_title VARCHAR(100) NOT NULL,
+                    fortune_message VARCHAR(500) NOT NULL,
+                    lucky_tag VARCHAR(64) NOT NULL,
+                    lucky_color VARCHAR(16) NOT NULL,
+                    luck_level INT NOT NULL,
+                    checked_at VARCHAR(64) NOT NULL,
+                    UNIQUE KEY uk_user_fun_check_in_day (user_id, check_in_date),
+                    KEY idx_user_fun_check_in_date (check_in_date)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
 
@@ -279,6 +302,77 @@ public class MySqlInitializer implements DatabaseInitializer {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
 
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS atcoder_contest (
+                    contest_id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    start_time_seconds BIGINT NOT NULL,
+                    end_time_seconds BIGINT NOT NULL,
+                    contest_url TEXT NOT NULL,
+                    member_snapshot_frozen TINYINT(1) NOT NULL DEFAULT 0,
+                    sync_status VARCHAR(32) NOT NULL DEFAULT 'UPCOMING',
+                    discovered_at VARCHAR(64) NOT NULL,
+                    last_sync_at VARCHAR(64),
+                    KEY idx_atcoder_contest_start (start_time_seconds),
+                    KEY idx_atcoder_contest_status (sync_status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS atcoder_requirement_member (
+                    contest_id VARCHAR(64) NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    atcoder_handle_snapshot VARCHAR(64),
+                    required TINYINT(1) NOT NULL DEFAULT 1,
+                    exempted TINYINT(1) NOT NULL DEFAULT 0,
+                    exemption_reason VARCHAR(500),
+                    frozen_at VARCHAR(64) NOT NULL,
+                    PRIMARY KEY (contest_id, user_id),
+                    KEY idx_atcoder_requirement_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS atcoder_participation (
+                    contest_id VARCHAR(64) NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    participated TINYINT(1) NOT NULL DEFAULT 0,
+                    contest_rank INT,
+                    performance INT,
+                    is_rated TINYINT(1),
+                    old_rating INT,
+                    new_rating INT,
+                    ac_count INT,
+                    solved_problem_ids TEXT,
+                    compliance_status VARCHAR(32) NOT NULL,
+                    source_error VARCHAR(500),
+                    checked_at VARCHAR(64) NOT NULL,
+                    PRIMARY KEY (contest_id, user_id),
+                    KEY idx_atcoder_participation_user (user_id),
+                    KEY idx_atcoder_participation_status (compliance_status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS atcoder_tracking_setting (
+                    id INT PRIMARY KEY,
+                    minimum_ac_count INT NOT NULL DEFAULT 1,
+                    grace_hours INT NOT NULL DEFAULT 24,
+                    updated_at VARCHAR(64) NOT NULL,
+                    updated_by BIGINT
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO atcoder_tracking_setting (id, minimum_ac_count, grace_hours, updated_at)
+                SELECT 1, 1, 24, ? WHERE NOT EXISTS (SELECT 1 FROM atcoder_tracking_setting WHERE id = 1)
+                """, java.time.OffsetDateTime.now().toString());
+
+        ensureColumn("users", "atcoder_handle", "ALTER TABLE users ADD COLUMN atcoder_handle VARCHAR(64)");
+        ensureColumn("users", "pending_atcoder_handle", "ALTER TABLE users ADD COLUMN pending_atcoder_handle VARCHAR(64)");
+        ensureColumn("users", "atcoder_binding_token", "ALTER TABLE users ADD COLUMN atcoder_binding_token VARCHAR(64)");
+        ensureColumn("users", "atcoder_binding_started_at_seconds", "ALTER TABLE users ADD COLUMN atcoder_binding_started_at_seconds BIGINT");
+        ensureColumn("users", "atcoder_verified_at_seconds", "ALTER TABLE users ADD COLUMN atcoder_verified_at_seconds BIGINT");
+
         // CREATE TABLE IF NOT EXISTS 不会给已有表补充新索引，因此单独执行轻量迁移。
         ensureIndex(
                 "users",
@@ -289,6 +383,12 @@ public class MySqlInitializer implements DatabaseInitializer {
                 "users",
                 "idx_users_member_type",
                 "ALTER TABLE users ADD INDEX idx_users_member_type (member_type)"
+        );
+        ensureIndex(
+                "users",
+                "uk_users_atcoder_handle",
+                "atcoder_handle",
+                "ALTER TABLE users ADD UNIQUE INDEX uk_users_atcoder_handle (atcoder_handle)"
         );
         ensureIndex(
                 "user_daily_status",
@@ -308,21 +408,45 @@ public class MySqlInitializer implements DatabaseInitializer {
     }
 
     private void ensureIndex(String tableName, String indexName, String createSql) {
+        ensureIndex(tableName, indexName, null, createSql);
+    }
+
+    private void ensureIndex(String tableName, String indexName, String indexedColumn, String createSql) {
         Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) connection -> {
-            try (java.sql.ResultSet indexes = connection.getMetaData().getIndexInfo(
-                    connection.getCatalog(),
-                    null,
-                    tableName,
-                    false,
-                    false
+            if (hasIndex(connection, tableName, indexName, indexedColumn)) return true;
+            return hasIndex(connection, tableName.toUpperCase(), indexName, indexedColumn);
+        });
+        if (!Boolean.TRUE.equals(exists)) {
+            jdbcTemplate.execute(createSql);
+        }
+    }
+
+    private boolean hasIndex(java.sql.Connection connection, String tableName, String indexName, String indexedColumn)
+            throws java.sql.SQLException {
+        try (java.sql.ResultSet indexes = connection.getMetaData().getIndexInfo(
+                connection.getCatalog(), null, tableName, false, false
+        )) {
+            while (indexes.next()) {
+                String existingName = indexes.getString("INDEX_NAME");
+                if (indexName.equalsIgnoreCase(existingName)) return true;
+                String existingColumn = indexes.getString("COLUMN_NAME");
+                if (indexedColumn != null && indexedColumn.equalsIgnoreCase(existingColumn)) return true;
+            }
+            return false;
+        }
+    }
+
+    private void ensureColumn(String tableName, String columnName, String createSql) {
+        Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) connection -> {
+            try (java.sql.ResultSet columns = connection.getMetaData().getColumns(
+                    connection.getCatalog(), null, tableName, columnName
             )) {
-                while (indexes.next()) {
-                    String existingName = indexes.getString("INDEX_NAME");
-                    if (indexName.equalsIgnoreCase(existingName)) {
-                        return true;
-                    }
-                }
-                return false;
+                if (columns.next()) return true;
+            }
+            try (java.sql.ResultSet columns = connection.getMetaData().getColumns(
+                    connection.getCatalog(), null, tableName.toUpperCase(), columnName.toUpperCase()
+            )) {
+                return columns.next();
             }
         });
         if (!Boolean.TRUE.equals(exists)) {

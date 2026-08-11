@@ -15,6 +15,7 @@ public record PublicUserProfile(
         String bio,
         MemberType memberType,
         String codeforcesHandle,
+        String atcoderHandle,
         Integer codeforcesRating,
         Integer maxRating,
         Integer totalPoints
@@ -34,6 +35,7 @@ public record PublicUserProfile(
                 user.getBio(),
                 user.getMemberType(),
                 user.getCodeforcesHandle(),
+                user.getAtcoderHandle(),
                 user.getCodeforcesRating(),
                 user.getMaxRating(),
                 user.getTotalPoints()

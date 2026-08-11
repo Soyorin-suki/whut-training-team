@@ -51,9 +51,14 @@ export default function CheckInModal({ open, onOpenChange, onCheckIn, loading, r
                   onClick={handleSubmit}
                   disabled={loading || !submissionId.trim()}
                 >
-                  {loading ? "校验中..." : "提交校验"}
+                  {loading ? "排队校验中..." : "提交校验"}
                 </button>
               </div>
+              {loading && (
+                <p className="m-0 mt-3 text-xs text-text-secondary">
+                  Codeforces 官方接口有限流，任务会在后台按顺序完成，请保持页面打开。
+                </p>
+              )}
             </div>
           ) : (
             <div className="text-center">

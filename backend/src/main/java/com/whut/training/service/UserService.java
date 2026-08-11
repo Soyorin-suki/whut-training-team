@@ -1,6 +1,8 @@
 package com.whut.training.service;
 
 import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.AtCoderBindingResponse;
+import com.whut.training.domain.dto.AtCoderBindingStartRequest;
 import com.whut.training.domain.dto.CodeforcesBindingResponse;
 import com.whut.training.domain.dto.CodeforcesBindingStartRequest;
 import com.whut.training.domain.dto.UserUpdateRequest;
@@ -72,4 +74,8 @@ public interface UserService {
      * 检查验证提交并完成 Codeforces 账号绑定。
      */
     User finishCodeforcesBinding(Long userId);
+
+    AtCoderBindingResponse startAtCoderBinding(Long userId, AtCoderBindingStartRequest request);
+
+    User finishAtCoderBinding(Long userId);
 }

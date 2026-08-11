@@ -5,6 +5,7 @@ import CheckInModal from "../components/ui/CheckInModal";
 import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import ProblemCard from "../components/ui/ProblemCard";
+import AddToProblemListButton from "../components/ui/AddToProblemListButton";
 import { CardSkeleton } from "../components/ui/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { parseTags } from "../utils/cf";
@@ -264,30 +265,40 @@ export default function DailyProblemPage() {
         <div className="space-y-3">
           {todayDisplay.active.map((problem) => (
             <div key={problem.problemKey}>
-              <ProblemCard problem={problem} showTags={showTags} />
-              <div className="mt-1.5 flex justify-end">
-                <button
-                  className="px-3 py-1 text-xs font-medium text-white bg-success hover:bg-[#268845] rounded-ui border-0 cursor-pointer disabled:opacity-40"
-                  disabled={problem.checkedIn}
-                  onClick={() => openCheckIn(problem)}
-                >
-                  {problem.checkedIn ? TEXT.checkedIn : TEXT.submitCheckIn}
-                </button>
-              </div>
+              <ProblemCard
+                problem={problem}
+                showTags={showTags}
+                actions={(
+                  <>
+                    <AddToProblemListButton problem={problem} />
+                    <button
+                      className="min-h-8 px-3 text-xs font-bold text-white bg-success hover:bg-[#268845] rounded-lg border-0 cursor-pointer disabled:opacity-40"
+                      disabled={problem.checkedIn}
+                      onClick={() => openCheckIn(problem)}
+                    >
+                      {problem.checkedIn ? TEXT.checkedIn : TEXT.submitCheckIn}
+                    </button>
+                  </>
+                )}
+              />
             </div>
           ))}
 
           {todayDisplay.extra.map((problem) => (
             <div key={problem.problemKey}>
-              <ProblemCard problem={problem} showTags={showTags} />
-              <div className="mt-1.5 flex justify-end gap-2 items-center">
-                <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-0.5 rounded">
-                  {TEXT.redrawnCheckedIn}
-                </span>
-                <span className="text-sm text-success font-medium">
-                  +{problem.score ?? 0}
-                </span>
-              </div>
+              <ProblemCard
+                problem={problem}
+                showTags={showTags}
+                actions={(
+                  <>
+                    <AddToProblemListButton problem={problem} />
+                    <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-1 rounded">
+                      {TEXT.redrawnCheckedIn}
+                    </span>
+                    <span className="text-sm text-success font-medium">+{problem.score ?? 0}</span>
+                  </>
+                )}
+              />
             </div>
           ))}
 
@@ -368,7 +379,8 @@ export default function DailyProblemPage() {
                             <span className="text-[11px] text-text-secondary">{TEXT.checkedBeforeRedraw}</span>
                           )}
                         </div>
-                        <div>
+                        <div className="flex flex-shrink-0 items-center gap-2">
+                          <AddToProblemListButton problem={item} compact />
                           {item.checkedIn ? (
                             <span className="text-success font-medium">
                               +{item.score ?? 0}

@@ -19,7 +19,7 @@ export default {
         'active': '#D2D2CC',
       },
       borderRadius: {
-        'ui': '14px',
+        'ui': '16px',
       },
       maxWidth: {
         'page': '1540px',

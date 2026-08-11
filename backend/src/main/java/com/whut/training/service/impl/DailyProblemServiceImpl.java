@@ -177,8 +177,13 @@ public class DailyProblemServiceImpl implements DailyProblemService {
      */
     @Override
     public CheckInResultResponse checkIn(User user, Long submissionId) {
+        return checkIn(user, submissionId, timeProvider.today());
+    }
+
+    @Override
+    public CheckInResultResponse checkIn(User user, Long submissionId, LocalDate targetDate) {
         String codeforcesHandle = requireCodeforcesHandle(user);
-        LocalDate today = timeProvider.today();
+        LocalDate today = targetDate == null ? timeProvider.today() : targetDate;
         // support multi-slot daily: try to find matching slot (easy/hard) first
         ensureDailySlots(today, false, "api");
 
@@ -189,38 +194,29 @@ public class DailyProblemServiceImpl implements DailyProblemService {
                 .filter(slot -> !slot.isRedrawn())
                 .toList();
 
-        CodeforcesApiService.SubmissionStatus submissionStatus = null;
-        com.whut.training.domain.entity.DailyProblemSlot matchedSlot = null;
-        if (!activeSlots.isEmpty()) {
-            // try to match submission to one of the non-redrawn slots
-            for (com.whut.training.domain.entity.DailyProblemSlot slot : activeSlots) {
-                try {
-                    submissionStatus = verifySubmission(codeforcesHandle, submissionId, slot.contestId(), slot.problemIndex());
-                    matchedSlot = slot;
-                    break;
-                } catch (BusinessException ex) {
-                    // not this slot, continue
-                }
-            }
-        }
+        // Fetch the submission once, then match it against both active slots locally.
+        CodeforcesApiService.SubmissionStatus submissionStatus = codeforcesApiService
+                .getSubmissionStatus(codeforcesHandle, submissionId)
+                .orElseThrow(() -> new BusinessException(
+                        400,
+                        "非该用户提交记录，或提交ID不存在（submissionId=" + submissionId + "）"
+                ));
+        com.whut.training.domain.entity.DailyProblemSlot matchedSlot = activeSlots.stream()
+                .filter(slot -> sameProblem(submissionStatus, slot.contestId(), slot.problemIndex()))
+                .findFirst()
+                .orElse(null);
 
         // fallback to original single daily problem
         com.whut.training.domain.entity.DailyProblem single = activeSlots.isEmpty()
                 ? ensureDailyProblem(today, false, "api")
                 : null;
-        if (matchedSlot == null && single != null) {
-            try {
-                submissionStatus = verifySubmission(codeforcesHandle, submissionId, single.contestId(), single.problemIndex());
-                if (!"OK".equalsIgnoreCase(submissionStatus.verdict())) {
-                    throw new BusinessException(400, "提交未通过，判题结果为 " + submissionStatus.verdict());
-                }
-            } catch (BusinessException ex) {
-                throw ex;
-            }
-        }
-
-        if (submissionStatus == null) {
-            throw new BusinessException(400, "提交未通过或不匹配今日题目");
+        if (matchedSlot == null && (single == null
+                || !sameProblem(submissionStatus, single.contestId(), single.problemIndex()))) {
+            throw new BusinessException(
+                    400,
+                    "提交不匹配今日题目，实际题目为 "
+                            + submissionStatus.contestId() + submissionStatus.problemIndex()
+            );
         }
 
         if (!"OK".equalsIgnoreCase(submissionStatus.verdict())) {
@@ -610,35 +606,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         return dailyProblemRepository.upsertProblems(problems);
     }
 
-    /**
-     * 校验提交是否属于指定题目。
-     *
-     * @param handle       Codeforces 用户名。
-     * @param submissionId 提交 ID。
-     * @param contestId    题目比赛 ID。
-     * @param problemIndex 题目编号。
-     * @return 提交状态。
-     */
-    private CodeforcesApiService.SubmissionStatus verifySubmission(String handle, Long submissionId, Integer contestId,
-                                                                   String problemIndex) {
-        CodeforcesApiService.SubmissionStatus submissionStatus = codeforcesApiService
-                .getSubmissionStatus(handle, submissionId)
-                .orElseThrow(() -> new BusinessException(
-                        400,
-                        "非该用户提交记录，或提交ID不存在（submissionId=" + submissionId + "）"
-                ));
-        boolean sameProblem = contestId.equals(submissionStatus.contestId())
-                && problemIndex.equalsIgnoreCase(submissionStatus.problemIndex());
-        if (!sameProblem) {
-            throw new BusinessException(
-                    400,
-                    "非对应题目提交，期望题目为 "
-                            + contestId + problemIndex
-                            + "，实际为 "
-                            + submissionStatus.contestId() + submissionStatus.problemIndex()
-            );
-        }
-        return submissionStatus;
+    private boolean sameProblem(CodeforcesApiService.SubmissionStatus submission, Integer contestId,
+                                String problemIndex) {
+        return contestId != null && contestId.equals(submission.contestId())
+                && problemIndex != null && problemIndex.equalsIgnoreCase(submission.problemIndex());
     }
 
     /**

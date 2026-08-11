@@ -1,34 +1,53 @@
 import { useEffect, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Link } from "react-router-dom";
 import { getHomeOverview } from "../api/home";
-import { getHeatmap } from "../api/user";
+import { funCheckInToday, getFunCheckIns, getHeatmap } from "../api/user";
 import { useAuth } from "../context/AuthContext";
 import ProblemCard from "../components/ui/ProblemCard";
+import AddToProblemListButton from "../components/ui/AddToProblemListButton";
 import Heatmap from "../components/ui/Heatmap";
 import UserAvatar from "../components/ui/UserAvatar";
 import { CardSkeleton } from "../components/ui/Skeleton";
-import { Activity, ArrowUpRight, Flame, LoaderCircle, Send, Trophy } from "lucide-react";
+import {
+  Activity,
+  ArrowUpRight,
+  CalendarCheck2,
+  CalendarDays,
+  Dices,
+  LoaderCircle,
+  Send,
+  Trophy,
+  X,
+} from "lucide-react";
 import CodeforcesOverview from "../components/profile/CodeforcesOverview";
-
-function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
+import TrainingCalendar, { FortuneDialog } from "../components/home/TrainingCalendar";
 
 export default function HomePage() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [heatmapData, setHeatmapData] = useState([]);
+  const [checkInData, setCheckInData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [heatmapLoading, setHeatmapLoading] = useState(true);
+  const [checkInLoading, setCheckInLoading] = useState(true);
   const [error, setError] = useState("");
   const [heatmapError, setHeatmapError] = useState("");
+  const [checkInError, setCheckInError] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [fortuneOpen, setFortuneOpen] = useState(false);
+  const [fortuneItem, setFortuneItem] = useState(null);
+  const [fortuneDrawing, setFortuneDrawing] = useState(false);
+  const [fortuneError, setFortuneError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setHeatmapLoading(Boolean(user?.id));
+    setCheckInLoading(Boolean(user?.id));
     setError("");
     setHeatmapError("");
+    setCheckInError("");
 
     getHomeOverview(10)
       .then((overview) => {
@@ -54,9 +73,24 @@ export default function HomePage() {
         .finally(() => {
           if (!cancelled) setHeatmapLoading(false);
         });
+
+      getFunCheckIns(user.id, 365)
+        .then((response) => {
+          if (!cancelled && response?.code === 200) {
+            setCheckInData(response.data || []);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setCheckInError("签到日历暂时无法加载");
+        })
+        .finally(() => {
+          if (!cancelled) setCheckInLoading(false);
+        });
     } else {
       setHeatmapData([]);
       setHeatmapLoading(false);
+      setCheckInData([]);
+      setCheckInLoading(false);
     }
 
     return () => { cancelled = true; };
@@ -83,6 +117,47 @@ export default function HomePage() {
     return () => window.clearInterval(timer);
   }, [data?.problemPoolInitializing]);
 
+  async function handleFunCheckIn() {
+    if (!user?.id) throw new Error("请先登录");
+    try {
+      const response = await funCheckInToday(user.id);
+      if (response?.code !== 200 || !response.data) {
+        throw new Error(response?.message || "签到失败，请稍后重试");
+      }
+      const item = response.data;
+      setCheckInData((current) => [
+        ...current.filter((entry) => entry.date !== item.date),
+        item,
+      ].sort((left, right) => left.date.localeCompare(right.date)));
+      setCheckInError("");
+      return item;
+    } catch (error) {
+      if (error?.message && !error?.response) throw error;
+      throw new Error("签到失败，请稍后重试");
+    }
+  }
+
+  async function handleFortuneEntry() {
+    const existing = checkInData.find((item) => item.date === formatLocalDate(new Date()));
+    if (existing) {
+      setFortuneItem(existing);
+      setFortuneOpen(true);
+      return;
+    }
+    if (fortuneDrawing || checkInLoading) return;
+    setFortuneDrawing(true);
+    setFortuneError("");
+    try {
+      const item = await handleFunCheckIn();
+      setFortuneItem(item);
+      setFortuneOpen(true);
+    } catch (fortuneFailure) {
+      setFortuneError(fortuneFailure?.message || "抽签失败，请稍后重试");
+    } finally {
+      setFortuneDrawing(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -104,40 +179,87 @@ export default function HomePage() {
   }
 
   const { totalUsers, topUsers, todayProblem, todayPushProblem, dailySubmissionSummary } = data || {};
+  const todayCheckIn = checkInData.find((item) => item.date === formatLocalDate(new Date()));
 
   // Determine today's display problems (backend now filters out redrawn slots)
   const todayProblems = Array.isArray(todayProblem) ? todayProblem : (todayProblem ? [todayProblem] : []);
 
   return (
     <div className="space-y-5">
-      <header className="dashboard-hero">
-        <div>
-          <p className="dashboard-eyebrow">/ DASHBOARD · {getTodayStr()}</p>
-          <h1>今天，也向前一步。</h1>
-          <p>专注训练，记录每一次提交与成长。</p>
-        </div>
-        <div className="dashboard-hero-aside">
-          <div className="dashboard-user-chip">
-            <UserAvatar user={user} size={56} />
-            <span>
-              <strong>{user?.displayName || user?.username || "训练者"}</strong>
-              <small>@{user?.username || "guest"}</small>
-            </span>
+      <header className="home-profile-panel">
+        <div className="home-profile-identity">
+          <UserAvatar user={user} size={88} />
+          <div>
+            <span className="home-profile-eyebrow">MY TRAINING SPACE</span>
+            <h1>{user?.displayName || user?.username || "训练者"}</h1>
+            <p>
+              @{user?.username || "guest"}
+              {user?.codeforcesHandle ? <span> · Codeforces @{user.codeforcesHandle}</span> : null}
+            </p>
           </div>
-          <Link to="/daily" className="dashboard-hero-action">
-            开始今日训练 <ArrowUpRight size={17} />
+        </div>
+
+        <div className="home-quick-actions">
+          <button
+            type="button"
+            className="home-quick-card fortune-entry"
+            onClick={handleFortuneEntry}
+            disabled={fortuneDrawing || checkInLoading || Boolean(checkInError)}
+          >
+            <span className="home-quick-icon"><Dices size={20} /></span>
+            <span className="home-quick-copy">
+              <small>DAILY FORTUNE</small>
+              <strong>{fortuneDrawing ? "正在抽取..." : todayCheckIn ? todayCheckIn.fortuneTitle : "抽取今日签"}</strong>
+            </span>
+            <ArrowUpRight size={17} />
+          </button>
+
+          <button type="button" className="home-quick-card" onClick={() => setCalendarOpen(true)}>
+            <span className="home-quick-icon"><CalendarDays size={20} /></span>
+            <span className="home-quick-copy">
+              <small>CHECK-IN</small>
+              <strong>查看签到日历</strong>
+            </span>
+            <ArrowUpRight size={17} />
+          </button>
+
+          <Link to="/daily" className="home-training-entry">
+            <span>开始训练</span><ArrowUpRight size={18} />
           </Link>
         </div>
-        <span className="dashboard-shape dashboard-shape-circle" aria-hidden="true" />
-        <span className="dashboard-shape dashboard-shape-square" aria-hidden="true" />
+        {fortuneError && <p className="home-profile-error">{fortuneError}</p>}
       </header>
+
+      <FortuneDialog open={fortuneOpen} onOpenChange={setFortuneOpen} item={fortuneItem} />
+
+      <Dialog.Root open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="calendar-dialog-overlay" />
+          <Dialog.Content className="calendar-dialog">
+            <div className="calendar-dialog-head">
+              <div>
+                <Dialog.Title>签到日历</Dialog.Title>
+                <Dialog.Description>查看签到记录，也可以回看过去抽到的签。</Dialog.Description>
+              </div>
+              <Dialog.Close className="calendar-dialog-close" aria-label="关闭签到日历"><X size={19} /></Dialog.Close>
+            </div>
+            {!checkInLoading && (
+              <TrainingCalendar data={checkInData} onCheckIn={handleFunCheckIn} loadError={checkInError} />
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Activity} index="01" label="活跃用户" value={totalUsers ?? 0} />
-        <StatCard icon={Flame} index="02" label="今日打卡" value={dailySubmissionSummary?.todayCheckedInUsers ?? 0} />
-        <StatCard icon={Send} index="03" label="今日提交" value={dailySubmissionSummary?.todaySubmissions ?? 0} />
-        <StatCard icon={Trophy} index="04" label="我的积分" value={user?.totalPoints ?? 0} />
+        <StatCard icon={Activity} label="活跃用户" value={totalUsers ?? 0} />
+        <StatCard
+          icon={CalendarCheck2}
+          label="今日签到"
+          value={todayCheckIn ? "已签到" : "待签到"}
+        />
+        <StatCard icon={Send} label="今日提交" value={dailySubmissionSummary?.todaySubmissions ?? 0} />
+        <StatCard icon={Trophy} label="我的积分" value={user?.totalPoints ?? 0} />
       </div>
 
       <CodeforcesOverview
@@ -146,9 +268,11 @@ export default function HomePage() {
         compact
       />
 
-      {/* Heatmap */}
-      <section className="render-lazy">
-        <h2 className="text-base font-semibold text-text-primary m-0 mb-2">打卡热力图</h2>
+      <section className="render-lazy cf-heatmap-section">
+        <div className="cf-heatmap-section-head">
+          <h2>训练热力图</h2>
+          <span>LAST 12 MONTHS</span>
+        </div>
         {heatmapLoading ? (
           <CardSkeleton />
         ) : heatmapError ? (
@@ -156,8 +280,8 @@ export default function HomePage() {
             {heatmapError}
           </div>
         ) : (
-          <div className="bg-white border border-border rounded-ui p-5 overflow-hidden">
-            <Heatmap data={heatmapData} />
+          <div className="cf-heatmap-card">
+            <Heatmap data={heatmapData} totalAllTime={user?.totalPoints ?? 0} />
           </div>
         )}
       </section>
@@ -175,7 +299,11 @@ export default function HomePage() {
           {todayProblems.length > 0 ? (
             <div className="space-y-2">
               {todayProblems.map((p, i) => (
-                <ProblemCard key={p.problemKey || i} problem={p} />
+                <ProblemCard
+                  key={p.problemKey || i}
+                  problem={p}
+                  actions={<AddToProblemListButton problem={p} />}
+                />
               ))}
             </div>
           ) : data?.problemPoolInitializing ? (
@@ -279,11 +407,10 @@ export default function HomePage() {
   );
 }
 
-function StatCard({ icon: Icon, index, label, value, subtitle }) {
+function StatCard({ icon: Icon, label, value, subtitle }) {
   return (
     <div className="stat-card">
       <div className="stat-card-top">
-        <span>{index}</span>
         <Icon size={17} strokeWidth={1.7} />
       </div>
       <p>{label}</p>
@@ -291,4 +418,11 @@ function StatCard({ icon: Icon, index, label, value, subtitle }) {
       {subtitle && <small>{subtitle}</small>}
     </div>
   );
+}
+
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

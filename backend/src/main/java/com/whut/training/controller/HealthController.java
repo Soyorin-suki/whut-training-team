@@ -4,6 +4,8 @@ import com.whut.training.common.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -17,17 +19,33 @@ import java.util.Map;
 @RequestMapping("/api/health")
 public class HealthController {
 
+    private final JdbcTemplate jdbcTemplate;
+
+    public HealthController(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
     /**
      * 获取健康状态。
      *
      * @return 包含状态与当前时间的统一响应。
      */
     @GetMapping
-    public ApiResponse<Map<String, Object>> health() {
-        return ApiResponse.ok(Map.of(
-                "status", "UP",
-                "time", LocalDateTime.now().toString()
-        ));
+    public ResponseEntity<ApiResponse<Map<String, Object>>> health() {
+        try {
+            jdbcTemplate.queryForObject("SELECT 1", Integer.class);
+            return ResponseEntity.ok(ApiResponse.ok(Map.of(
+                    "status", "UP",
+                    "database", "UP",
+                    "time", LocalDateTime.now().toString()
+            )));
+        } catch (Exception ex) {
+            return ResponseEntity.status(503).body(new ApiResponse<>(
+                    503,
+                    "service unavailable",
+                    Map.of("status", "DOWN", "database", "DOWN")
+            ));
+        }
     }
 }
 

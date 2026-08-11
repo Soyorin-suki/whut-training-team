@@ -3,6 +3,7 @@ package com.whut.training.config;
 import com.whut.training.interceptor.AccessTokenInterceptor;
 import com.whut.training.interceptor.RequestLoggingInterceptor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -17,6 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final AccessTokenInterceptor accessTokenInterceptor;
     private final RequestLoggingInterceptor requestLoggingInterceptor;
+    private final String[] allowedOrigins;
 
         /**
          * 创建 Web MVC 配置。
@@ -25,9 +27,14 @@ public class WebConfig implements WebMvcConfigurer {
          * @param requestLoggingInterceptor 请求日志拦截器。
          */
     public WebConfig(AccessTokenInterceptor accessTokenInterceptor,
-                     RequestLoggingInterceptor requestLoggingInterceptor) {
+                     RequestLoggingInterceptor requestLoggingInterceptor,
+                     @Value("${app.cors.allowed-origins:http://localhost:5173}") String allowedOrigins) {
         this.accessTokenInterceptor = accessTokenInterceptor;
         this.requestLoggingInterceptor = requestLoggingInterceptor;
+        this.allowedOrigins = java.util.Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .toArray(String[]::new);
     }
 
         /**
@@ -38,7 +45,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:5173")
+                .allowedOrigins(allowedOrigins)
                 .allowedMethods("*")
                 .allowedHeaders("*")
                 .exposedHeaders("Content-Disposition")

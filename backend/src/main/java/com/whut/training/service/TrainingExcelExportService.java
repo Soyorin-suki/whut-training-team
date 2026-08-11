@@ -6,6 +6,7 @@ import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.MemberType;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.CodeforcesRatingHistoryRepository;
+import com.whut.training.repository.AtCoderTrackingRepository;
 import com.whut.training.repository.TrainingDashboardRepository;
 import com.whut.training.repository.UserRepository;
 import org.apache.poi.common.usermodel.HyperlinkType;
@@ -50,6 +51,7 @@ public class TrainingExcelExportService {
     private final TrainingDashboardRepository trainingDashboardRepository;
     private final CodeforcesRatingHistoryRepository ratingHistoryRepository;
     private final CodeforcesProfileService codeforcesProfileService;
+    private final AtCoderTrackingRepository atCoderTrackingRepository;
     private final TimeProvider timeProvider;
 
     public TrainingExcelExportService(
@@ -57,18 +59,21 @@ public class TrainingExcelExportService {
             TrainingDashboardRepository trainingDashboardRepository,
             CodeforcesRatingHistoryRepository ratingHistoryRepository,
             CodeforcesProfileService codeforcesProfileService,
+            AtCoderTrackingRepository atCoderTrackingRepository,
             TimeProvider timeProvider
     ) {
         this.userRepository = userRepository;
         this.trainingDashboardRepository = trainingDashboardRepository;
         this.ratingHistoryRepository = ratingHistoryRepository;
         this.codeforcesProfileService = codeforcesProfileService;
+        this.atCoderTrackingRepository = atCoderTrackingRepository;
         this.timeProvider = timeProvider;
     }
 
     public ExportResult export(TrainingExportRequest request) {
         if (request == null || (!request.includeDaily()
-                && !request.includeCodeforcesContests())) {
+                && !request.includeCodeforcesContests()
+                && !request.includeAtCoderContests())) {
             throw new BusinessException(400, "at least one export data type is required");
         }
 
@@ -96,6 +101,9 @@ public class TrainingExcelExportService {
                 request.includeCodeforcesContests()
                         ? ratingHistoryRepository.findActiveTeamHistory(startTimeSeconds)
                         : List.of();
+        List<AtCoderTrackingRepository.AtCoderExportRow> atCoderRows = request.includeAtCoderContests()
+                ? atCoderTrackingRepository.findExportRows(startTimeSeconds)
+                : List.of();
 
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
@@ -103,6 +111,7 @@ public class TrainingExcelExportService {
             writeSummarySheet(workbook, styles, members, dailyRows, contestRows, request, startDate, today);
             if (request.includeDaily()) writeDailySheet(workbook, styles, dailyRows, startDate, today);
             if (request.includeCodeforcesContests()) writeContestSheet(workbook, styles, contestRows, startDate, today);
+            if (request.includeAtCoderContests()) writeAtCoderSheet(workbook, styles, atCoderRows, startDate, today);
             workbook.setActiveSheet(0);
             workbook.write(output);
             String rangeName = switch (request.exportRange()) {
@@ -256,6 +265,52 @@ public class TrainingExcelExportService {
                 new int[]{20, 16, 18, 20, 13, 38, 12, 14, 14, 14, 38});
     }
 
+    private void writeAtCoderSheet(
+            XSSFWorkbook workbook,
+            Styles styles,
+            List<AtCoderTrackingRepository.AtCoderExportRow> rows,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        Sheet sheet = workbook.createSheet("AtCoder ABC");
+        sheet.setDisplayGridlines(false);
+        String[] headers = {
+                "比赛时间", "比赛ID", "比赛名称", "站内账号", "成员姓名", "AtCoder账号",
+                "检查状态", "是否参赛", "AC数", "通过题目", "比赛排名", "Performance",
+                "赛前Rating", "赛后Rating", "豁免原因", "最近检查", "比赛链接"
+        };
+        createTitle(sheet, styles, headers.length, "AtCoder Beginner Contest 周赛完成明细");
+        createRangeMeta(sheet, styles, headers.length, startDate, endDate);
+        int headerRowIndex = 3;
+        createHeader(sheet, headerRowIndex, headers, styles);
+        int rowIndex = headerRowIndex + 1;
+        for (AtCoderTrackingRepository.AtCoderExportRow item : rows) {
+            Row row = sheet.createRow(rowIndex++);
+            CellStyle base = row.getRowNum() % 2 == 0 ? styles.bodyAlternate : styles.body;
+            dateTimeCell(row, 0, item.startTimeSeconds(), styles.dateTime);
+            textCell(row, 1, item.contestId(), base);
+            textCell(row, 2, item.contestName(), base);
+            textCell(row, 3, item.username(), base);
+            textCell(row, 4, item.displayName(), base);
+            textCell(row, 5, item.atcoderHandle(), base);
+            String status = item.exempted() ? "EXEMPT" : item.status();
+            textCell(row, 6, atCoderStatusLabel(status),
+                    "COMPLETED".equals(status) ? styles.completed : styles.pending);
+            textCell(row, 7, item.participated() ? "是" : "否", base);
+            nullableNumberCell(row, 8, item.acCount(), styles.integer);
+            textCell(row, 9, item.solvedProblemIds(), base);
+            nullableNumberCell(row, 10, item.contestRank(), styles.integer);
+            nullableNumberCell(row, 11, item.performance(), styles.integer);
+            nullableNumberCell(row, 12, item.oldRating(), styles.integer);
+            nullableNumberCell(row, 13, item.newRating(), styles.integer);
+            textCell(row, 14, item.exemptionReason(), base);
+            textCell(row, 15, item.checkedAt(), base);
+            hyperlinkCell(workbook, row, 16, item.contestUrl(), styles.hyperlink);
+        }
+        finishTable(sheet, headerRowIndex, rowIndex - 1, headers.length,
+                new int[]{20, 13, 38, 16, 18, 20, 16, 12, 10, 30, 12, 15, 14, 14, 28, 24, 38});
+    }
+
     private Map<Long, DailyStats> aggregateDaily(List<TrainingDashboardRepository.DailyExportRow> rows) {
         Map<Long, DailyStats> result = new HashMap<>();
         for (TrainingDashboardRepository.DailyExportRow row : rows) {
@@ -362,7 +417,22 @@ public class TrainingExcelExportService {
         java.util.ArrayList<String> names = new java.util.ArrayList<>();
         if (request.includeDaily()) names.add("每日一题");
         if (request.includeCodeforcesContests()) names.add("CF Rating 比赛");
+        if (request.includeAtCoderContests()) names.add("AtCoder ABC");
         return String.join("、", names);
+    }
+
+    private String atCoderStatusLabel(String status) {
+        if (status == null) return "待同步";
+        return switch (status) {
+            case "COMPLETED" -> "已完成";
+            case "PARTICIPATED" -> "已参赛未达标";
+            case "ABSENT" -> "缺席";
+            case "UNBOUND" -> "未绑定";
+            case "EXEMPT" -> "已豁免";
+            case "DATA_ERROR" -> "数据异常";
+            case "UPCOMING" -> "待比赛";
+            default -> "等待同步";
+        };
     }
 
     private String rangeLabel(LocalDate startDate, LocalDate endDate) {

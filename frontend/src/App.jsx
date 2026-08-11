@@ -13,6 +13,7 @@ const PracticePage = lazy(() => import("./pages/PracticePage"));
 const ProblemListsPage = lazy(() => import("./pages/ProblemListsPage"));
 const PushPage = lazy(() => import("./pages/PushPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const AccountBindingPage = lazy(() => import("./pages/AccountBindingPage"));
 const MemberProfilePage = lazy(() => import("./pages/MemberProfilePage"));
 const AdminDailyPage = lazy(() => import("./pages/admin/AdminDailyPage"));
 const AdminTrainingDashboardPage = lazy(() => import("./pages/admin/AdminTrainingDashboardPage"));
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="/problem-lists" element={<ProblemListsPage />} />
         <Route path="/push" element={<PushPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/account-binding" element={<AccountBindingPage />} />
         <Route path="/members/:id" element={<MemberProfilePage />} />
 
         {/* Admin routes */}

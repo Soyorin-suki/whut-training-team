@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
 
 /** 个人题单与管理员共享题单业务。 */
 @Service
-public class ProblemListService {
+public class ProblemListService implements ProblemListUseCase {
 
     private static final Pattern CF_PROBLEMSET = Pattern.compile(
             "codeforces\\.com/problemset/problem/(\\d+)/([A-Za-z0-9]+)",
@@ -106,9 +106,7 @@ public class ProblemListService {
                 problem.rating(),
                 problem.tags()
         );
-        return repository.findItems(listId).stream()
-                .filter(item -> item.id().equals(itemId))
-                .findFirst()
+        return repository.findItem(listId, itemId)
                 .orElseThrow(() -> new IllegalStateException("problem list item was not created"));
     }
 
@@ -136,9 +134,7 @@ public class ProblemListService {
                 problem.tags()
         );
         if (updated == 0) throw new BusinessException(404, "problem list item not found");
-        return repository.findItems(listId).stream()
-                .filter(item -> item.id().equals(itemId))
-                .findFirst()
+        return repository.findItem(listId, itemId)
                 .orElseThrow(() -> new BusinessException(404, "problem list item not found"));
     }
 

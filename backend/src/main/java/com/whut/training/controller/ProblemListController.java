@@ -9,7 +9,7 @@ import com.whut.training.domain.dto.ProblemListSaveRequest;
 import com.whut.training.domain.dto.ProblemListSummary;
 import com.whut.training.domain.entity.User;
 import com.whut.training.exception.BusinessException;
-import com.whut.training.service.ProblemListService;
+import com.whut.training.service.ProblemListUseCase;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,9 +27,9 @@ import java.util.List;
 @RequestMapping("/api/problem-lists")
 public class ProblemListController {
 
-    private final ProblemListService problemListService;
+    private final ProblemListUseCase problemListService;
 
-    public ProblemListController(ProblemListService problemListService) {
+    public ProblemListController(ProblemListUseCase problemListService) {
         this.problemListService = problemListService;
     }
 

@@ -9,6 +9,8 @@ import com.whut.training.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -24,6 +26,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * 汇总并缓存 Codeforces 用户公开统计。
@@ -43,22 +47,37 @@ public class CodeforcesProfileService {
     private final CodeforcesProfileSnapshotRepository snapshotRepository;
     private final CodeforcesRatingHistoryRepository ratingHistoryRepository;
     private final Duration cacheDuration;
+    private final Executor backgroundExecutor;
     private final Map<Long, CacheEntry> memoryCache = new ConcurrentHashMap<>();
     private final Map<Long, Object> refreshLocks = new ConcurrentHashMap<>();
     private final Set<Long> refreshingUsers = ConcurrentHashMap.newKeySet();
 
+    @Autowired
     public CodeforcesProfileService(
             UserRepository userRepository,
             CodeforcesApiService codeforcesApiService,
             CodeforcesProfileSnapshotRepository snapshotRepository,
             CodeforcesRatingHistoryRepository ratingHistoryRepository,
-            @Value("${codeforces.profile-cache-minutes:30}") long cacheMinutes
+            @Value("${codeforces.profile-cache-minutes:30}") long cacheMinutes,
+            @Qualifier("codeforcesBackgroundExecutor") Executor backgroundExecutor
     ) {
         this.userRepository = userRepository;
         this.codeforcesApiService = codeforcesApiService;
         this.snapshotRepository = snapshotRepository;
         this.ratingHistoryRepository = ratingHistoryRepository;
         this.cacheDuration = Duration.ofMinutes(Math.max(1, cacheMinutes));
+        this.backgroundExecutor = backgroundExecutor;
+    }
+
+    CodeforcesProfileService(
+            UserRepository userRepository,
+            CodeforcesApiService codeforcesApiService,
+            CodeforcesProfileSnapshotRepository snapshotRepository,
+            CodeforcesRatingHistoryRepository ratingHistoryRepository,
+            long cacheMinutes
+    ) {
+        this(userRepository, codeforcesApiService, snapshotRepository, ratingHistoryRepository,
+                cacheMinutes, ForkJoinPool.commonPool());
     }
 
     public CodeforcesOverview getOverview(Long userId) {
@@ -135,15 +154,20 @@ public class CodeforcesProfileService {
         if (!refreshingUsers.add(userId)) {
             return;
         }
-        CompletableFuture.runAsync(() -> {
-            try {
-                refresh(userId);
-            } catch (RuntimeException ex) {
-                log.warn("Background Codeforces profile refresh failed for userId={}: {}", userId, ex.getMessage());
-            } finally {
-                refreshingUsers.remove(userId);
-            }
-        });
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    refresh(userId);
+                } catch (RuntimeException ex) {
+                    log.warn("Background Codeforces profile refresh failed for userId={}: {}", userId, ex.getMessage());
+                } finally {
+                    refreshingUsers.remove(userId);
+                }
+            }, backgroundExecutor);
+        } catch (RuntimeException rejected) {
+            refreshingUsers.remove(userId);
+            log.warn("Background Codeforces profile refresh queue is full for userId={}", userId);
+        }
     }
 
     private CodeforcesOverview refreshNow(User user, String handle) {

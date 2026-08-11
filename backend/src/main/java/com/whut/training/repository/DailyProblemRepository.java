@@ -739,7 +739,9 @@ public class DailyProblemRepository {
         int maxScore = items.stream().mapToInt(DailyHeatmapItem::score).max().orElse(1);
         return items.stream()
                 .map(item -> new DailyHeatmapItem(item.date(), item.score(),
-                        maxScore > 0 ? Math.min(4, item.score() * 5 / maxScore) : 0))
+                        item.score() > 0 && maxScore > 0
+                                ? Math.max(1, Math.min(4, (int) Math.ceil(item.score() * 4.0 / maxScore)))
+                                : 0))
                 .toList();
     }
 

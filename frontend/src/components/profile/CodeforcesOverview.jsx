@@ -62,38 +62,6 @@ export default function CodeforcesOverview({
     };
   }, [userId, handle]);
 
-  useEffect(() => {
-    if (!userId || !handle || !data?.stale) return undefined;
-
-    let cancelled = false;
-    let requesting = false;
-    let attempts = 0;
-    const timer = window.setInterval(async () => {
-      if (requesting || attempts >= 10) {
-        if (attempts >= 10) window.clearInterval(timer);
-        return;
-      }
-      requesting = true;
-      attempts += 1;
-      try {
-        const response = await getCodeforcesOverview(userId);
-        if (!cancelled && response.code === 200) {
-          setData(response.data);
-          if (!response.data?.stale) window.clearInterval(timer);
-        }
-      } catch {
-        // Keep the basic or stale snapshot visible while the background refresh retries.
-      } finally {
-        requesting = false;
-      }
-    }, 3000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [userId, handle, data?.stale]);
-
   async function handleRefresh() {
     setRefreshing(true);
     setError("");
@@ -150,7 +118,7 @@ export default function CodeforcesOverview({
       <section className="bg-white border border-border rounded-ui p-4">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
-            <p className="dashboard-eyebrow m-0">CODEFORCES OVERVIEW</p>
+            <h2 className="m-0 mb-1 text-sm font-bold text-text-primary">Codeforces 概览</h2>
             <a
               href={`https://codeforces.com/profile/${encodeURIComponent(handle)}`}
               target="_blank"

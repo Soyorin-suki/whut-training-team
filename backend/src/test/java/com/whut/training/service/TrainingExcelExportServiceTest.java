@@ -7,6 +7,7 @@ import com.whut.training.domain.enums.MemberType;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.CodeforcesRatingHistoryRepository;
+import com.whut.training.repository.AtCoderTrackingRepository;
 import com.whut.training.repository.TrainingDashboardRepository;
 import com.whut.training.repository.UserRepository;
 import org.apache.poi.ss.usermodel.CellType;
@@ -31,6 +32,7 @@ class TrainingExcelExportServiceTest {
         TrainingDashboardRepository dashboardRepository = mock(TrainingDashboardRepository.class);
         CodeforcesRatingHistoryRepository ratingRepository = mock(CodeforcesRatingHistoryRepository.class);
         CodeforcesProfileService profileService = mock(CodeforcesProfileService.class);
+        AtCoderTrackingRepository atCoderRepository = mock(AtCoderTrackingRepository.class);
         TimeProvider timeProvider = mock(TimeProvider.class);
         LocalDate today = LocalDate.of(2026, 8, 1);
         LocalDate startDate = today.minusDays(6);
@@ -58,22 +60,32 @@ class TrainingExcelExportServiceTest {
                         "https://codeforces.com/contest/2048"
                 )
         ));
+        when(atCoderRepository.findExportRows(startDate.atStartOfDay(
+                java.time.ZoneId.of("Asia/Shanghai")).toEpochSecond())).thenReturn(List.of(
+                new AtCoderTrackingRepository.AtCoderExportRow(
+                        "abc460", "AtCoder Beginner Contest 460", 1_780_148_400L,
+                        "https://atcoder.jp/contests/abc460", 7L, "owl", "猫头鹰", "Persona_owl",
+                        false, null, "COMPLETED", true, 2, "abc460_a,abc460_b",
+                        321, 1800, true, 1700, 1750, "2026-08-01T23:00:00+08:00"
+                )
+        ));
 
         TrainingExcelExportService service = new TrainingExcelExportService(
-                userRepository, dashboardRepository, ratingRepository, profileService, timeProvider
+                userRepository, dashboardRepository, ratingRepository, profileService, atCoderRepository, timeProvider
         );
         TrainingExcelExportService.ExportResult result = service.export(
-                new TrainingExportRequest("WEEK", true, true)
+                new TrainingExportRequest("WEEK", true, true, true)
         );
 
         assertThat(result.filename()).contains("最近一周").endsWith("20260801.xlsx");
         verify(profileService).ensureRatingHistory(7L);
         assertThat(result.content()).isNotEmpty();
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(result.content()))) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(3);
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(4);
             assertThat(workbook.getSheetName(0)).isEqualTo("成员汇总");
             assertThat(workbook.getSheetName(1)).isEqualTo("每日一题");
             assertThat(workbook.getSheetName(2)).isEqualTo("CF Rating比赛");
+            assertThat(workbook.getSheetName(3)).isEqualTo("AtCoder ABC");
 
             assertThat(workbook.getSheet("成员汇总").getRow(5).getCell(1).getStringCellValue())
                     .isEqualTo("猫头鹰");
@@ -93,10 +105,11 @@ class TrainingExcelExportServiceTest {
                 mock(TrainingDashboardRepository.class),
                 mock(CodeforcesRatingHistoryRepository.class),
                 mock(CodeforcesProfileService.class),
+                mock(AtCoderTrackingRepository.class),
                 mock(TimeProvider.class)
         );
 
-        assertThatThrownBy(() -> service.export(new TrainingExportRequest("WEEK", false, false)))
+        assertThatThrownBy(() -> service.export(new TrainingExportRequest("WEEK", false, false, false)))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("at least one");
     }

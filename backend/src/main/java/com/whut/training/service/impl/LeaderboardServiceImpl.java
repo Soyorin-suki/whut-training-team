@@ -24,6 +24,6 @@ public class LeaderboardServiceImpl implements LeaderboardService {
 
     @Override
     public int countTotal() {
-        return userRepository.countAll();
+        return userRepository.countRankedUsers();
     }
 }

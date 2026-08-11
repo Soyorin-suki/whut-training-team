@@ -70,20 +70,24 @@ public class ProblemListRepository {
                 WHERE list_id = ?
                 ORDER BY sort_order ASC, id ASC
                 """,
-                (rs, rowNum) -> new ProblemListItemView(
-                        rs.getLong("id"),
-                        rs.getLong("list_id"),
-                        rs.getString("title"),
-                        rs.getString("link"),
-                        rs.getString("note"),
-                        rs.getString("problem_key"),
-                        (Integer) rs.getObject("rating"),
-                        rs.getString("tags"),
-                        rs.getInt("sort_order"),
-                        timestampText(rs.getTimestamp("created_at"))
-                ),
+                ProblemListRepository::mapItem,
                 listId
         );
+    }
+
+    public Optional<ProblemListItemView> findItem(Long listId, Long itemId) {
+        List<ProblemListItemView> rows = jdbcTemplate.query(
+                """
+                SELECT id, list_id, title, link, note, problem_key, rating, tags, sort_order, created_at
+                FROM problem_list_item
+                WHERE list_id = ? AND id = ?
+                LIMIT 1
+                """,
+                ProblemListRepository::mapItem,
+                listId,
+                itemId
+        );
+        return rows.stream().findFirst();
     }
 
     public Long createList(Long ownerUserId, String name, String description, boolean shared) {
@@ -264,6 +268,21 @@ public class ProblemListRepository {
                 ownerUserId.equals(viewerUserId),
                 timestampText(rs.getTimestamp("created_at")),
                 timestampText(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private static ProblemListItemView mapItem(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new ProblemListItemView(
+                rs.getLong("id"),
+                rs.getLong("list_id"),
+                rs.getString("title"),
+                rs.getString("link"),
+                rs.getString("note"),
+                rs.getString("problem_key"),
+                (Integer) rs.getObject("rating"),
+                rs.getString("tags"),
+                rs.getInt("sort_order"),
+                timestampText(rs.getTimestamp("created_at"))
         );
     }
 

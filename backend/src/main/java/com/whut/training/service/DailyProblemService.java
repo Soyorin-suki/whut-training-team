@@ -3,6 +3,7 @@ package com.whut.training.service;
 import com.whut.training.domain.dto.*;
 import com.whut.training.domain.entity.User;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -27,6 +28,11 @@ public interface DailyProblemService {
      * @return 打卡结果。
      */
     CheckInResultResponse checkIn(User user, Long submissionId);
+
+    /**
+     * 校验指定日期的每日题提交。异步任务在入队时固定日期，避免排队跨过零点后误校验下一日题目。
+     */
+    CheckInResultResponse checkIn(User user, Long submissionId, LocalDate targetDate);
 
     /**
      * 获取每日题历史。

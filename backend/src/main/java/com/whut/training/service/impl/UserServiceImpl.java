@@ -3,6 +3,8 @@ package com.whut.training.service.impl;
 import com.whut.training.aspect.annotation.ServiceLog;
 import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.domain.dto.AtCoderBindingResponse;
+import com.whut.training.domain.dto.AtCoderBindingStartRequest;
 import com.whut.training.domain.dto.CodeforcesBindingResponse;
 import com.whut.training.domain.dto.CodeforcesBindingStartRequest;
 import com.whut.training.domain.dto.UserUpdateRequest;
@@ -12,20 +14,23 @@ import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.UserRepository;
 import com.whut.training.service.CodeforcesApiService;
+import com.whut.training.service.AtCoderApiService;
 import com.whut.training.service.UserService;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
+import java.util.UUID;
 
 /**
  * 用户服务实现。
  *
  * <p>负责站内账号注册、Codeforces 所有权验证绑定、管理员创建用户、
- * 用户资料更新和查询。站内用户名与 Codeforces Handle 相互独立。
- * 当前密码仍以明文方式存储，是已知风险。
+ * 用户资料更新和查询。站内用户名与 Codeforces Handle 相互独立，密码使用 BCrypt 存储。
  */
 @Service
 @ServiceLog
@@ -33,10 +38,13 @@ public class UserServiceImpl implements UserService {
 
     private static final long CODEFORCES_BINDING_TTL_SECONDS = 120;
     private static final String CODEFORCES_VERIFICATION_URL = "https://codeforces.com/contest/1/problem/A";
+    private static final long ATCODER_BINDING_TTL_SECONDS = 600;
 
     private final UserRepository userRepository;
     private final CodeforcesApiService codeforcesApiService;
+    private final AtCoderApiService atCoderApiService;
     private final TimeProvider timeProvider;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * 创建用户服务实现。
@@ -45,10 +53,13 @@ public class UserServiceImpl implements UserService {
      * @param codeforcesApiService Codeforces API 服务。
      */
     public UserServiceImpl(UserRepository userRepository, CodeforcesApiService codeforcesApiService,
-                           TimeProvider timeProvider) {
+                           AtCoderApiService atCoderApiService, TimeProvider timeProvider,
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.codeforcesApiService = codeforcesApiService;
+        this.atCoderApiService = atCoderApiService;
         this.timeProvider = timeProvider;
+        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -67,7 +78,7 @@ public class UserServiceImpl implements UserService {
                 null,
                 request.getUsername(),
                 normalizeNullableText(request.getEmail()),
-                request.getPassword(),
+                passwordEncoder.encode(request.getPassword()),
                 UserRole.USER
         );
         user.setDisplayName(request.getDisplayName().trim());
@@ -85,7 +96,13 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BusinessException(400, "username already exists");
         }
-        User user = new User(null, request.getUsername(), request.getEmail(), request.getPassword(), request.getRole());
+        User user = new User(
+                null,
+                request.getUsername(),
+                request.getEmail(),
+                passwordEncoder.encode(request.getPassword()),
+                request.getRole()
+        );
         return userRepository.save(user);
     }
 
@@ -164,7 +181,7 @@ public class UserServiceImpl implements UserService {
                 if (password.length() < 6) {
                     throw new BusinessException(400, "password length must be at least 6");
                 }
-                user.setPassword(password);
+                user.setPassword(passwordEncoder.encode(password));
             }
         }
 
@@ -173,7 +190,7 @@ public class UserServiceImpl implements UserService {
         }
 
         if (request.avatar() != null) {
-            String avatarUrl = normalizeNullableText(request.avatar());
+            String avatarUrl = validateAvatar(normalizeNullableText(request.avatar()));
             user.setAvatarUrl(avatarUrl);
             user.setAvatarCustomized(avatarUrl != null);
         }
@@ -187,6 +204,27 @@ public class UserServiceImpl implements UserService {
         }
 
         return userRepository.save(user);
+    }
+
+    private String validateAvatar(String avatar) {
+        if (avatar == null) {
+            return null;
+        }
+        if (avatar.length() > 700_000) {
+            throw new BusinessException(400, "avatar is too large");
+        }
+        if (avatar.matches("^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=\\r\\n]+$")) {
+            return avatar;
+        }
+        try {
+            URI uri = URI.create(avatar);
+            if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null) {
+                return avatar;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // converted to a stable client error below
+        }
+        throw new BusinessException(400, "avatar must be a HTTPS URL or a PNG/JPEG/WebP data image");
     }
 
     @Override
@@ -252,6 +290,66 @@ public class UserServiceImpl implements UserService {
         syncCodeforcesProfile(user, profile);
         clearPendingCodeforcesBinding(user);
         return userRepository.save(user);
+    }
+
+    @Override
+    public AtCoderBindingResponse startAtCoderBinding(Long userId, AtCoderBindingStartRequest request) {
+        User user = getById(userId);
+        String handle = request.handle().trim();
+        Optional<User> boundUser = userRepository.findByAtcoderHandle(handle);
+        if (boundUser.isPresent() && !boundUser.get().getId().equals(userId)) {
+            throw new BusinessException(400, "this AtCoder handle is already bound");
+        }
+        if (atCoderApiService.getPublicProfile(handle).isEmpty()) {
+            throw new BusinessException(400, "AtCoder Handle 不存在或 AtCoder 暂时无法访问");
+        }
+        long startedAt = timeProvider.nowEpochSecond();
+        String token = "WHUT-ACM-" + UUID.randomUUID().toString()
+                .replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+        user.setPendingAtcoderHandle(handle);
+        user.setAtcoderBindingToken(token);
+        user.setAtcoderBindingStartedAtSeconds(startedAt);
+        userRepository.save(user);
+        return new AtCoderBindingResponse(handle, token, startedAt + ATCODER_BINDING_TTL_SECONDS,
+                atCoderApiService.profileUrl(handle),
+                "请临时将 AtCoder 个人资料中的 Affiliation 修改为验证码，然后完成验证");
+    }
+
+    @Override
+    public User finishAtCoderBinding(Long userId) {
+        User user = getById(userId);
+        String handle = user.getPendingAtcoderHandle();
+        String token = user.getAtcoderBindingToken();
+        Long startedAt = user.getAtcoderBindingStartedAtSeconds();
+        if (handle == null || token == null || startedAt == null) {
+            throw new BusinessException(400, "AtCoder 绑定尚未开始");
+        }
+        long now = timeProvider.nowEpochSecond();
+        if (now - startedAt > ATCODER_BINDING_TTL_SECONDS) {
+            clearPendingAtCoderBinding(user);
+            userRepository.save(user);
+            throw new BusinessException(400, "AtCoder 验证已过期，请重新开始");
+        }
+        AtCoderApiService.AtCoderPublicProfile profile = atCoderApiService.getPublicProfile(handle)
+                .orElseThrow(() -> new BusinessException(503, "AtCoder 暂时无法访问，请稍后重试"));
+        if (profile.affiliation() == null
+                || !profile.affiliation().toUpperCase(Locale.ROOT).contains(token.toUpperCase(Locale.ROOT))) {
+            throw new BusinessException(400, "未在 AtCoder Affiliation 中检测到验证码");
+        }
+        Optional<User> boundUser = userRepository.findByAtcoderHandle(handle);
+        if (boundUser.isPresent() && !boundUser.get().getId().equals(userId)) {
+            throw new BusinessException(400, "this AtCoder handle is already bound");
+        }
+        user.setAtcoderHandle(handle);
+        user.setAtcoderVerifiedAtSeconds(now);
+        clearPendingAtCoderBinding(user);
+        return userRepository.save(user);
+    }
+
+    private void clearPendingAtCoderBinding(User user) {
+        user.setPendingAtcoderHandle(null);
+        user.setAtcoderBindingToken(null);
+        user.setAtcoderBindingStartedAtSeconds(null);
     }
 
     /**

@@ -19,7 +19,9 @@ public class UserRepository {
 
     private static final String SELECT_COLUMNS =
             "id, username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, avatar_customized, total_points, display_name, bio, " +
-                    "codeforces_handle, pending_codeforces_handle, codeforces_binding_started_at_seconds, member_type, show_problem_tags";
+                    "codeforces_handle, pending_codeforces_handle, codeforces_binding_started_at_seconds, " +
+                    "atcoder_handle, pending_atcoder_handle, atcoder_binding_token, atcoder_binding_started_at_seconds, atcoder_verified_at_seconds, " +
+                    "member_type, show_problem_tags";
 
     private final RowMapper<User> userRowMapperWithPoints = (rs, rowNum) -> {
         User u = new User(
@@ -52,6 +54,11 @@ public class UserRepository {
         u.setCodeforcesHandle(rs.getString("codeforces_handle"));
         u.setPendingCodeforcesHandle(rs.getString("pending_codeforces_handle"));
         u.setCodeforcesBindingStartedAtSeconds(parseLongValue(rs.getObject("codeforces_binding_started_at_seconds")));
+        u.setAtcoderHandle(rs.getString("atcoder_handle"));
+        u.setPendingAtcoderHandle(rs.getString("pending_atcoder_handle"));
+        u.setAtcoderBindingToken(rs.getString("atcoder_binding_token"));
+        u.setAtcoderBindingStartedAtSeconds(parseLongValue(rs.getObject("atcoder_binding_started_at_seconds")));
+        u.setAtcoderVerifiedAtSeconds(parseLongValue(rs.getObject("atcoder_verified_at_seconds")));
         u.setMemberType(parseMemberType(rs.getString("member_type")));
         u.setShowProblemTags(parseBooleanValue(rs.getObject("show_problem_tags"), true));
         return u;
@@ -64,7 +71,7 @@ public class UserRepository {
     public User save(User user) {
         if (user.getId() == null) {
             jdbcTemplate.update(
-                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, avatar_customized, total_points, display_name, bio, codeforces_handle, pending_codeforces_handle, codeforces_binding_started_at_seconds, member_type, show_problem_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO users (username, email, password, role, uid, codeforces_rating, max_rating, is_online, last_online_time_seconds, avatar_url, avatar_customized, total_points, display_name, bio, codeforces_handle, pending_codeforces_handle, codeforces_binding_started_at_seconds, atcoder_handle, pending_atcoder_handle, atcoder_binding_token, atcoder_binding_started_at_seconds, atcoder_verified_at_seconds, member_type, show_problem_tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     user.getUsername(),
                     user.getEmail(),
                     user.getPassword(),
@@ -82,6 +89,11 @@ public class UserRepository {
                     user.getCodeforcesHandle(),
                     user.getPendingCodeforcesHandle(),
                     user.getCodeforcesBindingStartedAtSeconds(),
+                    user.getAtcoderHandle(),
+                    user.getPendingAtcoderHandle(),
+                    user.getAtcoderBindingToken(),
+                    user.getAtcoderBindingStartedAtSeconds(),
+                    user.getAtcoderVerifiedAtSeconds(),
                     user.getMemberType() == null ? MemberType.REGULAR.name() : user.getMemberType().name(),
                     !Boolean.FALSE.equals(user.getShowProblemTags())
             );
@@ -95,7 +107,7 @@ public class UserRepository {
         }
 
         jdbcTemplate.update(
-                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, avatar_customized = ?, total_points = ?, display_name = ?, bio = ?, codeforces_handle = ?, pending_codeforces_handle = ?, codeforces_binding_started_at_seconds = ?, member_type = ?, show_problem_tags = ? WHERE id = ?",
+                "UPDATE users SET username = ?, email = ?, password = ?, role = ?, uid = ?, codeforces_rating = ?, max_rating = ?, is_online = ?, last_online_time_seconds = ?, avatar_url = ?, avatar_customized = ?, total_points = ?, display_name = ?, bio = ?, codeforces_handle = ?, pending_codeforces_handle = ?, codeforces_binding_started_at_seconds = ?, atcoder_handle = ?, pending_atcoder_handle = ?, atcoder_binding_token = ?, atcoder_binding_started_at_seconds = ?, atcoder_verified_at_seconds = ?, member_type = ?, show_problem_tags = ? WHERE id = ?",
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
@@ -113,6 +125,11 @@ public class UserRepository {
                 user.getCodeforcesHandle(),
                 user.getPendingCodeforcesHandle(),
                 user.getCodeforcesBindingStartedAtSeconds(),
+                user.getAtcoderHandle(),
+                user.getPendingAtcoderHandle(),
+                user.getAtcoderBindingToken(),
+                user.getAtcoderBindingStartedAtSeconds(),
+                user.getAtcoderVerifiedAtSeconds(),
                 user.getMemberType() == null ? MemberType.REGULAR.name() : user.getMemberType().name(),
                 !Boolean.FALSE.equals(user.getShowProblemTags()),
                 user.getId()
@@ -162,6 +179,15 @@ public class UserRepository {
         return c == null ? 0 : c;
     }
 
+    public int countRankedUsers() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM users WHERE role <> ?",
+                Integer.class,
+                UserRole.SUPER_ADMIN.name()
+        );
+        return count == null ? 0 : count;
+    }
+
     public boolean existsByUsername(String username) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(1) FROM users WHERE username = ?",
@@ -177,6 +203,18 @@ public class UserRepository {
         }
         List<User> users = jdbcTemplate.query(
                 "SELECT " + SELECT_COLUMNS + " FROM users WHERE LOWER(codeforces_handle) = LOWER(?)",
+                userRowMapperWithPoints,
+                handle.trim()
+        );
+        return users.stream().findFirst();
+    }
+
+    public Optional<User> findByAtcoderHandle(String handle) {
+        if (handle == null || handle.isBlank()) {
+            return Optional.empty();
+        }
+        List<User> users = jdbcTemplate.query(
+                "SELECT " + SELECT_COLUMNS + " FROM users WHERE LOWER(atcoder_handle) = LOWER(?)",
                 userRowMapperWithPoints,
                 handle.trim()
         );
@@ -210,19 +248,25 @@ public class UserRepository {
     public List<LeaderboardItem> findTopByTotalPoints(int limit) {
         String sql = "SELECT u.id, u.username, u.display_name, u.avatar_url, u.total_points, " +
                 "(SELECT MAX(checked_at) FROM user_daily_status uds WHERE uds.user_id = u.id) AS last_checkin_at " +
-                "FROM users u " +
+                "FROM users u WHERE u.role <> ? " +
                 "ORDER BY u.total_points DESC, last_checkin_at DESC " +
                 "LIMIT ?";
-        return jdbcTemplate.query(sql, leaderboardRowMapper(), limit);
+        return jdbcTemplate.query(sql, leaderboardRowMapper(), UserRole.SUPER_ADMIN.name(), limit);
     }
 
     public List<LeaderboardItem> findTopByTotalPoints(int limit, int offset) {
         String sql = "SELECT u.id, u.username, u.display_name, u.avatar_url, u.total_points, " +
                 "(SELECT MAX(checked_at) FROM user_daily_status uds WHERE uds.user_id = u.id) AS last_checkin_at " +
-                "FROM users u " +
+                "FROM users u WHERE u.role <> ? " +
                 "ORDER BY u.total_points DESC, last_checkin_at DESC " +
                 "LIMIT ? OFFSET ?";
-        return jdbcTemplate.query(sql, leaderboardRowMapper(), limit, offset);
+        return jdbcTemplate.query(
+                sql,
+                leaderboardRowMapper(),
+                UserRole.SUPER_ADMIN.name(),
+                limit,
+                offset
+        );
     }
 
     private UserRole parseRole(String roleText) {

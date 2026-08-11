@@ -7,7 +7,7 @@ import com.whut.training.domain.enums.UserRole;
 /**
  * 用户实体。
  *
- * <p>承载登录、个人资料和 Codeforces 统计信息。当前实现中 password 仍以明文存储，属于已知安全风险，后续应改为哈希密码。
+ * <p>承载登录、个人资料和 Codeforces 统计信息。password 仅保存不可逆哈希且不会序列化到接口响应。
  */
 public class User {
     private Long id;
@@ -29,6 +29,12 @@ public class User {
     private String codeforcesHandle;
     private String pendingCodeforcesHandle;
     private Long codeforcesBindingStartedAtSeconds;
+    private String atcoderHandle;
+    private String pendingAtcoderHandle;
+    @JsonIgnore
+    private String atcoderBindingToken;
+    private Long atcoderBindingStartedAtSeconds;
+    private Long atcoderVerifiedAtSeconds;
     private MemberType memberType = MemberType.REGULAR;
     private Boolean showProblemTags = true;
 
@@ -381,6 +387,50 @@ public class User {
 
     public boolean isCodeforcesBound() {
         return codeforcesHandle != null && !codeforcesHandle.isBlank();
+    }
+
+    public String getAtcoderHandle() {
+        return atcoderHandle;
+    }
+
+    public void setAtcoderHandle(String atcoderHandle) {
+        this.atcoderHandle = atcoderHandle;
+    }
+
+    public String getPendingAtcoderHandle() {
+        return pendingAtcoderHandle;
+    }
+
+    public void setPendingAtcoderHandle(String pendingAtcoderHandle) {
+        this.pendingAtcoderHandle = pendingAtcoderHandle;
+    }
+
+    public String getAtcoderBindingToken() {
+        return atcoderBindingToken;
+    }
+
+    public void setAtcoderBindingToken(String atcoderBindingToken) {
+        this.atcoderBindingToken = atcoderBindingToken;
+    }
+
+    public Long getAtcoderBindingStartedAtSeconds() {
+        return atcoderBindingStartedAtSeconds;
+    }
+
+    public void setAtcoderBindingStartedAtSeconds(Long atcoderBindingStartedAtSeconds) {
+        this.atcoderBindingStartedAtSeconds = atcoderBindingStartedAtSeconds;
+    }
+
+    public Long getAtcoderVerifiedAtSeconds() {
+        return atcoderVerifiedAtSeconds;
+    }
+
+    public void setAtcoderVerifiedAtSeconds(Long atcoderVerifiedAtSeconds) {
+        this.atcoderVerifiedAtSeconds = atcoderVerifiedAtSeconds;
+    }
+
+    public boolean isAtcoderBound() {
+        return atcoderHandle != null && !atcoderHandle.isBlank() && atcoderVerifiedAtSeconds != null;
     }
 
     public MemberType getMemberType() {

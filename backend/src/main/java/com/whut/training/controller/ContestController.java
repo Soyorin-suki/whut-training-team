@@ -2,7 +2,7 @@ package com.whut.training.controller;
 
 import com.whut.training.common.ApiResponse;
 import com.whut.training.domain.dto.UpcomingContestItem;
-import com.whut.training.service.AtCoderContestService;
+import com.whut.training.service.ContestService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,14 +16,14 @@ import java.util.List;
 @RequestMapping("/api/contests")
 public class ContestController {
 
-    private final AtCoderContestService atCoderContestService;
+    private final ContestService contestService;
 
-    public ContestController(AtCoderContestService atCoderContestService) {
-        this.atCoderContestService = atCoderContestService;
+    public ContestController(ContestService contestService) {
+        this.contestService = contestService;
     }
 
     @GetMapping("/upcoming")
     public ApiResponse<List<UpcomingContestItem>> upcoming() {
-        return ApiResponse.ok(atCoderContestService.getUpcomingContests());
+        return ApiResponse.ok(contestService.getUpcomingContests());
     }
 }

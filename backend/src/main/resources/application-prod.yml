@@ -2,10 +2,25 @@
 # 激活方式: java -jar training-backend.jar --spring.profiles.active=prod
 # 或设置环境变量 SPRING_PROFILES_ACTIVE=prod
 
+spring:
+  datasource:
+    url: "${MYSQL_URL}"
+    username: "${MYSQL_USERNAME}"
+    password: "${MYSQL_PASSWORD}"
+
+superAdmin:
+  username: "${SUPERADMIN_USERNAME}"
+  password: "${SUPERADMIN_PASSWORD}"
+
 app:
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS}"
   logging:
     service:
       enabled: false
+    file:
+      max-history: 14
+      total-size-cap: 500MB
 
 logging:
   level:

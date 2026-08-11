@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +16,7 @@ import org.slf4j.LoggerFactory;
  * 全局异常处理器。
  *
  * <p>将业务异常、参数校验异常、请求体解析异常和兜底异常统一转换为 {@link com.whut.training.common.ApiResponse}。
- * 当前项目采用“HTTP 200 + 业务码”居多的风格，因此这里负责把错误信息稳定暴露给前端。
+ * 错误响应同时使用正确的 HTTP 状态码和统一业务响应体，便于网关、监控和前端准确识别失败。
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -28,8 +30,8 @@ public class GlobalExceptionHandler {
      * @return 统一失败响应。
      */
     @ExceptionHandler(BusinessException.class)
-    public ApiResponse<Void> handleBusiness(BusinessException ex) {
-        return ApiResponse.fail(ex.getCode(), ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
+        return response(ex.getCode(), ex.getMessage());
     }
 
     /**
@@ -39,22 +41,22 @@ public class GlobalExceptionHandler {
      * @return 统一失败响应。
      */
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, HttpMessageNotReadableException.class, MissingRequestHeaderException.class})
-    public ApiResponse<Void> handleBadRequest(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception ex) {
         if (ex instanceof MethodArgumentNotValidException manv
                 && manv.getBindingResult().getFieldError() != null) {
-            return ApiResponse.fail(400, manv.getBindingResult().getFieldError().getDefaultMessage());
+            return response(400, manv.getBindingResult().getFieldError().getDefaultMessage());
         }
         if (ex instanceof BindException be
                 && be.getBindingResult().getFieldError() != null) {
-            return ApiResponse.fail(400, be.getBindingResult().getFieldError().getDefaultMessage());
+            return response(400, be.getBindingResult().getFieldError().getDefaultMessage());
         }
         if (ex instanceof MissingRequestHeaderException mrh) {
-            return ApiResponse.fail(400, "missing required header: " + mrh.getHeaderName());
+            return response(400, "missing required header: " + mrh.getHeaderName());
         }
         if (ex instanceof HttpMessageNotReadableException) {
-            return ApiResponse.fail(400, "request body is invalid or missing");
+            return response(400, "request body is invalid or missing");
         }
-        return ApiResponse.fail(400, "invalid request");
+        return response(400, "invalid request");
     }
 
     /**
@@ -64,8 +66,8 @@ public class GlobalExceptionHandler {
      * @return 统一失败响应。
      */
     @ExceptionHandler(IllegalArgumentException.class)
-    public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException ex) {
-        return ApiResponse.fail(400, ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        return response(400, ex.getMessage());
     }
 
     /**
@@ -75,8 +77,15 @@ public class GlobalExceptionHandler {
      * @return 统一失败响应。
      */
     @ExceptionHandler(Exception.class)
-    public ApiResponse<Void> handleOther(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleOther(Exception ex) {
         log.error("Unhandled request exception", ex);
-        return ApiResponse.fail(500, "internal server error");
+        return response(500, "internal server error");
+    }
+
+    private ResponseEntity<ApiResponse<Void>> response(int status, String message) {
+        int safeStatus = status >= 400 && status <= 599 ? status : 500;
+        return ResponseEntity
+                .status(HttpStatusCode.valueOf(safeStatus))
+                .body(ApiResponse.fail(safeStatus, message));
     }
 }

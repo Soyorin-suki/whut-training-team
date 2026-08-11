@@ -197,12 +197,28 @@
 }
 ```
 
+接口立即返回异步任务，不会让 HTTP 请求线程等待 Codeforces 限流队列：
+```json
+{
+  "jobId": "8f9d...",
+  "status": "PENDING",
+  "message": "校验任务已进入队列",
+  "errorCode": null,
+  "result": null
+}
+```
+- `GET /api/daily-problem/check-in/{jobId}` 查询任务；终态为 `SUCCEEDED` 或 `FAILED`。
+- 相同用户和提交 ID 在 10 分钟内复用同一任务，任务结果在内存保留 1 小时。
+- 任务在提交时固定训练日期，因此排队跨过零点也不会误校验下一日题目。
+
 规则：
 - 校验该提交是否属于当前用户且对应今日题（easy 或 hard slot）。
+- 一次打卡只读取一次提交记录，再在本地匹配 easy/hard，避免重复调用 Codeforces。
 - 仅 `verdict=OK` 记分；记分值为题目 `rating`。
 - 同一用户同一天可多次打卡，取 max rating 为当日得分。
 - 已被重抽（`is_redrawn=true`）的 slot 不计入。
 - 打卡积分通过 per-user 同步锁保证并发安全。
+- Codeforces 请求由全局优先队列统一节流，交互式打卡优先于后台资料刷新。
 
 ### 4.3 每日题历史
 - `GET /api/daily-problem/history?days=0`
@@ -373,6 +389,7 @@
 - 题单只有一级，不允许嵌套子题单。
 - 普通用户的题单仅自己可见；`ADMIN`、`SUPER_ADMIN` 可将自己创建的题单设为 `shared=true`，供所有登录成员只读查看。
 - 只有创建者可以修改题单和其中的题目，包括管理员也不能修改他人的共享题单。
+- 每日题、自主练习结果及其历史记录复用 `POST /api/problem-lists/{id}/items` 快捷加入题单；前端也支持在弹窗内新建个人题单后立即加入。
 - 标准 Codeforces 链接会自动识别题号，并尝试从本地 `cf_problem` 补全标题、Rating 与标签；其他 OJ 链接需要填写标题。
 
 ## 9. 角色管理接口
@@ -408,12 +425,27 @@
 {
   "range": "WEEK",
   "includeDaily": true,
-  "includeCodeforcesContests": true
+  "includeCodeforcesContests": true,
+  "includeAtCoderContests": true
 }
 ```
 - `range` 可选 `WEEK`（最近 7 天）、`MONTH`（最近 30 天）、`ALL`（全部本地历史）。
-- 两个 `include*` 字段至少选择一个。接口返回 `.xlsx` 文件，其中始终包含“成员汇总”，并按选择增加“每日一题”“CF Rating比赛”工作表。
+- 三个 `include*` 字段至少选择一个。接口返回 `.xlsx` 文件，其中始终包含“成员汇总”，并按选择增加“每日一题”“CF Rating比赛”“AtCoder ABC”工作表。
 - CF 比赛明细读取本地完整 Rating 历史；首次导出发现旧账号尚无历史时，会按成员自动调用 `user.rating` 补齐。成员在个人页刷新 Codeforces 资料时也会同步更新完整比赛历史。
+
+### 9.5 AtCoder 账号绑定
+- `POST /api/users/{id}/atcoder-binding/start`：本人提交 `{ "handle": "AtCoder用户名" }`，返回验证码和 10 分钟有效期。
+- 用户将验证码填写到 AtCoder 个人设置的 `Affiliation` 并保存。
+- `POST /api/users/{id}/atcoder-binding/finish`：本人完成验证并绑定；同一 AtCoder Handle 不能被多个站内账号绑定。
+
+### 9.6 AtCoder ABC 管理看板
+- `GET /api/admin/atcoder-abc?contestId=abc460`：查看指定或最近一场 ABC 的现役成员完成情况。
+- `POST /api/admin/atcoder-abc/refresh?contestId=abc460`：立即重新同步比赛结果。
+- `PATCH /api/admin/atcoder-abc/setting`：设置最低赛时 AC 数和赛后最终判定等待小时数。
+- `PATCH /api/admin/atcoder-abc/{contestId}/members/{userId}/exemption`：设置或取消单场豁免；设置豁免时必须填写原因。
+- 权限：`ADMIN`、`SUPER_ADMIN`。
+
+判定状态：`UPCOMING`（待比赛）、`PENDING`（等待同步）、`COMPLETED`（参赛且 AC 达标）、`PARTICIPATED`（参赛但 AC 未达标）、`ABSENT`（等待期结束后仍无参赛历史）、`UNBOUND`（未绑定）、`EXEMPT`（已豁免）、`DATA_ERROR`（数据源异常，自动重试）。
 
 ## 10. 常见业务错误码
 - `400` 参数错误、提交不匹配题目、文件格式不支持等

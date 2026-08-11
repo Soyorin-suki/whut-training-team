@@ -1,5 +1,9 @@
 server:
   port: 8080
+  shutdown: graceful
+  forward-headers-strategy: framework
+  compression:
+    enabled: true
 
 spring:
   application:
@@ -13,10 +17,19 @@ spring:
       minimum-idle: 2
       maximum-pool-size: 10
       connection-timeout: 10000
+  task:
+    scheduling:
+      pool:
+        size: 3
+      thread-name-prefix: whut-scheduler-
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
 
 codeforces:
   base_url: https://codeforces.com/api
   profile-cache-minutes: 30
+  request-interval-ms: 2100
+  max-pending-requests: 200
 
 contests:
   cache-minutes: 15
@@ -24,6 +37,12 @@ contests:
   atcoder-url: https://atcoder.jp/contests/?lang=en
   nowcoder-url: https://ac.nowcoder.com/acm/contest/vip-index
   luogu-url: https://www.luogu.com.cn/contest/list
+
+atcoder:
+  origin: https://atcoder.jp
+
+atcoder-problems:
+  submissions-url: https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions
 
 push:
   defaultAutoApprove: false
@@ -33,6 +52,10 @@ superAdmin:
   password: superadmin123
 
 app:
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:5173}"
+  home:
+    cache-ms: 3000
   database:
     type: mysql
   logging:
@@ -52,6 +75,11 @@ app:
   daily:
     ratingThreshold: 1700
     historyRetentionDays: 0
+  atcoder-tracking:
+    fixed-delay-ms: 1800000
+    initial-delay-ms: 30000
+  daily-check-in:
+    cleanup-delay-ms: 600000
 
 logging:
   level:

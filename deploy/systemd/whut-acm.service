@@ -1,0 +1,25 @@
+[Unit]
+Description=WHUT-ACM Training Platform Backend
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=whut-acm
+Group=whut-acm
+WorkingDirectory=/opt/whut-acm
+EnvironmentFile=/etc/whut-acm/whut-acm.env
+ExecStart=/usr/bin/java -Xms256m -Xmx1024m -XX:+UseG1GC -Duser.timezone=Asia/Shanghai -jar /opt/whut-acm/training-backend.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/log/whut-acm
+
+[Install]
+WantedBy=multi-user.target
