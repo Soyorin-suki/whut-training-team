@@ -122,11 +122,16 @@ export default function DailyProblemPage() {
   }
 
   async function handleCheckIn(submissionId) {
+    const previousDayScore = Number(todayData?.score) || 0;
     setCheckInLoading(true);
     try {
       const resp = await checkInToday(submissionId);
       if (resp.code === 200) {
-        setCheckInResult(resp.data);
+        const currentDayScore = Number(resp.data?.score) || 0;
+        setCheckInResult({
+          ...resp.data,
+          earnedScore: Math.max(0, currentDayScore - previousDayScore),
+        });
         loadData();
       } else {
         setCheckInResult({

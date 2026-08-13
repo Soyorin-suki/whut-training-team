@@ -4,6 +4,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 
 export default function CheckInModal({ open, onOpenChange, onCheckIn, loading, result, title }) {
   const [submissionId, setSubmissionId] = useState("");
+  const earnedScore = result?.earnedScore ?? result?.score ?? 0;
 
   function handleSubmit() {
     if (!submissionId.trim()) return;
@@ -75,9 +76,9 @@ export default function CheckInModal({ open, onOpenChange, onCheckIn, loading, r
               <p className="text-sm text-text-secondary m-0">
                 Verdict: {result.verdict ?? "-"}
               </p>
-              {result.accepted && result.score > 0 && (
+              {result.accepted && earnedScore > 0 && (
                 <p className="text-sm font-medium text-success m-0 mt-1">
-                  +{result.score} 分
+                  +{earnedScore} 分
                 </p>
               )}
               <button
