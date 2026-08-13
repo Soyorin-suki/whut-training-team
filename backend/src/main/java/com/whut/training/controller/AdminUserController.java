@@ -38,7 +38,7 @@ public class AdminUserController {
         if (currentUser == null || (currentUser.getRole() != UserRole.ADMIN && currentUser.getRole() != UserRole.SUPER_ADMIN)) {
             throw new BusinessException(403, "admin role required");
         }
-        return ApiResponse.ok(userService.createByAdmin(request));
+        return ApiResponse.ok(userService.createByAdmin(currentUser, request));
     }
 
     /**
@@ -61,6 +61,11 @@ public class AdminUserController {
             throw new BusinessException(400, "invalid role: " + newRole);
         }
         User target = userService.getById(id);
+        if (target.getRole() == UserRole.SUPER_ADMIN
+                && targetRole != UserRole.SUPER_ADMIN
+                && userRepository.countByRole(UserRole.SUPER_ADMIN) <= 1) {
+            throw new BusinessException(409, "cannot demote the last super admin");
+        }
         String fromRole = target.getRole() == null ? null : target.getRole().name();
         userRepository.updateRole(id, targetRole.name());
         userRepository.insertRoleChangeLog(id, currentUser.getId(), fromRole, targetRole.name());

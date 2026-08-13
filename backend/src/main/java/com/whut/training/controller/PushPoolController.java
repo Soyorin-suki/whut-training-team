@@ -2,12 +2,15 @@ package com.whut.training.controller;
 
 import com.whut.training.common.ApiResponse;
 import com.whut.training.context.UserContext;
+import com.whut.training.domain.dto.PushPoolCreateRequest;
+import com.whut.training.domain.dto.PushSubmissionCreateRequest;
 import com.whut.training.domain.entity.PushPoolItem;
 import com.whut.training.domain.entity.PushSubmission;
 import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
 import com.whut.training.exception.BusinessException;
 import com.whut.training.service.PushPoolService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,10 +27,10 @@ public class PushPoolController {
     }
 
     @PostMapping("/push")
-    public ApiResponse<PushPoolItem> submit(@RequestBody Map<String, String> body) {
+    public ApiResponse<PushPoolItem> submit(@Valid @RequestBody PushPoolCreateRequest body) {
         User user = requireCurrentUser();
         return ApiResponse.ok(pushPoolService.submit(user,
-                body.get("title"), body.get("link"), body.get("description")));
+                body.title(), body.link(), body.description()));
     }
 
     @GetMapping("/push")
@@ -51,10 +54,11 @@ public class PushPoolController {
     }
 
     @PostMapping("/push/{id}/submit")
-    public ApiResponse<PushSubmission> submitSolution(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ApiResponse<PushSubmission> submitSolution(@PathVariable Long id,
+                                                       @Valid @RequestBody PushSubmissionCreateRequest body) {
         User user = requireCurrentUser();
         return ApiResponse.ok(pushPoolService.submitSolution(user, id,
-                body.get("submissionLink"), body.get("resultDescription")));
+                body.submissionLink(), body.resultDescription()));
     }
 
     @GetMapping("/push/{id}/submissions")

@@ -131,7 +131,7 @@ export default function HomeView({ initialPage = LOGIN, onAuthSuccess, onNavigat
                 setRegisterForm((prev) => ({ ...prev, password: event.target.value }))
               }
               type="password"
-              placeholder="密码（至少 6 位）"
+              placeholder="密码（至少 8 位）"
               required
             />
             <input

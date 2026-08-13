@@ -198,7 +198,7 @@ export default function AdminUsersPage() {
               <input className="w-full px-3 py-2 text-sm border border-border rounded-ui outline-none focus:border-text-primary"
                 type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} placeholder="邮箱" />
               <input className="w-full px-3 py-2 text-sm border border-border rounded-ui outline-none focus:border-text-primary"
-                type="password" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder="密码 * (至少6位)" />
+                type="password" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder="密码 * (至少8位)" />
               <select
                 className="w-full px-3 py-2 text-sm border border-border rounded-ui bg-white outline-none focus:border-text-primary"
                 value={createRole}

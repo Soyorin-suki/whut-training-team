@@ -501,7 +501,7 @@ export default function MainView({ auth, onLogout, onNavigate, onUserUpdate }) {
                         onChange={(event) => setProfilePassword(event.target.value)}
                         placeholder="留空表示不修改密码"
                       />
-                      <small>若填写，长度至少 6 位</small>
+                      <small>若填写，长度至少 8 位</small>
                     </label>
 
                   </div>

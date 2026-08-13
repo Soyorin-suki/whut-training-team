@@ -49,8 +49,8 @@ public class RequestLoggingInterceptor implements HandlerInterceptor {
         }
 
         String uri = request.getRequestURI();
-        String query = request.getQueryString();
-        String path = query == null || query.isBlank() ? uri : uri + "?" + query;
+        // Query values can contain personal or temporary verification data; never persist them in logs.
+        String path = uri;
         String clientIp = request.getRemoteAddr();
 
         if (ex == null) {

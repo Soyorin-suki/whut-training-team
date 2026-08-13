@@ -188,6 +188,15 @@ public class UserRepository {
         return count == null ? 0 : count;
     }
 
+    public int countByRole(UserRole role) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM users WHERE role = ?",
+                Integer.class,
+                role.name()
+        );
+        return count == null ? 0 : count;
+    }
+
     public boolean existsByUsername(String username) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(1) FROM users WHERE username = ?",

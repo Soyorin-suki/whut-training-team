@@ -2,6 +2,8 @@ package com.whut.training.service.impl;
 
 import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.CodeforcesBindingStartRequest;
+import com.whut.training.domain.dto.AdminCreateUserRequest;
+import com.whut.training.exception.BusinessException;
 import com.whut.training.domain.dto.UserRegisterRequest;
 import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
@@ -19,8 +21,10 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,7 +53,7 @@ class UserServiceImplTest {
                 timeProvider,
                 passwordEncoder
         );
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -69,6 +73,24 @@ class UserServiceImplTest {
         assertEquals("{bcrypt}123456", saved.getPassword());
         assertNull(saved.getCodeforcesHandle());
         verify(codeforcesApiService, never()).getUserInfo(any());
+    }
+
+    @Test
+    void regularAdminCannotCreateSuperAdmin() {
+        User administrator = new User(7L, "admin", null, "hash", UserRole.ADMIN);
+        AdminCreateUserRequest request = new AdminCreateUserRequest();
+        request.setUsername("unexpected-root");
+        request.setEmail("root@example.com");
+        request.setPassword("strong-password");
+        request.setRole(UserRole.SUPER_ADMIN);
+
+        BusinessException error = assertThrows(
+                BusinessException.class,
+                () -> userService.createByAdmin(administrator, request)
+        );
+
+        assertEquals(403, error.getCode());
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test

@@ -115,7 +115,7 @@
 ```
 
 说明：
-- `password` 可不传或传空字符串（表示不修改密码）。非空密码长度需 `>= 6`。
+- `password` 可不传或传空字符串（表示不修改密码）。非空密码长度需 `>= 8`。
 - `displayName` / `avatar` / `bio` 新增字段，可局部更新。
 - 修改 `username` 只修改站内登录名，不影响已绑定的 Codeforces Handle。
 

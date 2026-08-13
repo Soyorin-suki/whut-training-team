@@ -10,6 +10,7 @@ cd ../frontend && npm ci && npm audit --audit-level=high && npm run build
 ```
 
 生产库必须使用独立的非 root MySQL 账号。不要把真实密码写入仓库，也不要沿用开发环境默认账号。
+生产模式会在启动时校验安全配置：MySQL 与超级管理员密码必须至少 16 位，超级管理员用户名不能使用默认值，CORS 只能配置明确的 HTTPS 域名。校验失败时应用会拒绝启动。
 
 ## 2. 准备目录与账号
 

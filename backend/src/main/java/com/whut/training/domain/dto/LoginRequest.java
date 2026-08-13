@@ -1,6 +1,7 @@
 package com.whut.training.domain.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 /**
  * 登录请求。
@@ -11,9 +12,11 @@ import jakarta.validation.constraints.NotBlank;
 public class LoginRequest {
 
     @NotBlank(message = "username cannot be blank")
+    @Size(max = 50, message = "username length must be <= 50")
     private String username;
 
     @NotBlank(message = "password cannot be blank")
+    @Size(max = 64, message = "password length must be <= 64")
     private String password;
 
     /**

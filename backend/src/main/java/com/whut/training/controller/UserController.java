@@ -146,8 +146,8 @@ public class UserController {
         if (currentUser == null) {
             throw new BusinessException(401, "unauthorized");
         }
-        // 只有本人或管理员可以修改指定用户资料
-        if (!currentUser.getId().equals(id) && !isAdministrator(currentUser)) {
+        // 修改他人账号（包含密码）仅允许超级管理员，避免普通管理员接管高权限账号。
+        if (!currentUser.getId().equals(id) && currentUser.getRole() != UserRole.SUPER_ADMIN) {
             throw new BusinessException(403, "forbidden");
         }
         return ApiResponse.ok(userService.updateProfile(id, request));

@@ -84,7 +84,7 @@ export default function RegisterPage() {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="至少 6 位"
+            placeholder="至少 8 位"
             autoComplete="new-password"
             required
           />

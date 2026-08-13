@@ -22,10 +22,11 @@ public class AdminCreateUserRequest {
 
     @NotBlank(message = "email cannot be blank")
     @Email(message = "email format is invalid")
+    @Size(max = 255, message = "email length must be <= 255")
     private String email;
 
     @NotBlank(message = "password cannot be blank")
-    @Size(min = 6, max = 64, message = "password length must be 6-64")
+    @Size(min = 8, max = 64, message = "password length must be 8-64")
     private String password;
 
     @NotNull(message = "role cannot be null")

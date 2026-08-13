@@ -302,7 +302,7 @@ export default function ProfilePage() {
                 type="password"
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
-                placeholder="至少 6 位"
+                placeholder="至少 8 位"
               />
             </label>
             <label className="flex flex-col gap-1">

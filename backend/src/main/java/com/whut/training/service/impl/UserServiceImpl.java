@@ -92,7 +92,14 @@ public class UserServiceImpl implements UserService {
      * @return 新用户。
      */
     @Override
-    public User createByAdmin(AdminCreateUserRequest request) {
+    public User createByAdmin(User administrator, AdminCreateUserRequest request) {
+        if (administrator == null
+                || (administrator.getRole() != UserRole.ADMIN && administrator.getRole() != UserRole.SUPER_ADMIN)) {
+            throw new BusinessException(403, "admin role required");
+        }
+        if (request.getRole() != UserRole.USER && administrator.getRole() != UserRole.SUPER_ADMIN) {
+            throw new BusinessException(403, "only a super admin can create privileged accounts");
+        }
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BusinessException(400, "username already exists");
         }
@@ -178,8 +185,8 @@ public class UserServiceImpl implements UserService {
         if (request.password() != null) {
             String password = request.password().trim();
             if (!password.isEmpty()) {
-                if (password.length() < 6) {
-                    throw new BusinessException(400, "password length must be at least 6");
+                if (password.length() < 8) {
+                    throw new BusinessException(400, "password length must be at least 8");
                 }
                 user.setPassword(passwordEncoder.encode(password));
             }

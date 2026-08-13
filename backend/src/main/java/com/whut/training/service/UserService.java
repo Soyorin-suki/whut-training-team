@@ -31,7 +31,7 @@ public interface UserService {
      * @param request 创建请求。
      * @return 新用户。
      */
-    User createByAdmin(AdminCreateUserRequest request);
+    User createByAdmin(User administrator, AdminCreateUserRequest request);
 
     /**
      * 获取全部用户。

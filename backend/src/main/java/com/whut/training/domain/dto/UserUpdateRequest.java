@@ -20,7 +20,7 @@ public record UserUpdateRequest(
         @Email(message = "email format is invalid")
         @Size(max = 255, message = "email is too long")
         String email,
-        @Size(min = 6, max = 64, message = "password length must be 6-64")
+        @Size(min = 8, max = 64, message = "password length must be 8-64")
         String password,
         @Size(max = 100, message = "display name is too long")
         String displayName,

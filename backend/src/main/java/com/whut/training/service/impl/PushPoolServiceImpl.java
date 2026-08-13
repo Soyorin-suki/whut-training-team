@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -40,10 +41,8 @@ public class PushPoolServiceImpl implements PushPoolService {
         if (title == null || title.isBlank()) {
             throw new BusinessException(400, "title is required");
         }
-        if (link == null || link.isBlank()) {
-            throw new BusinessException(400, "link is required");
-        }
-        PushPoolItem item = pushPoolRepository.insert(title.trim(), link.trim(),
+        String safeLink = requireHttpUrl(link, "link");
+        PushPoolItem item = pushPoolRepository.insert(title.trim(), safeLink,
                 description == null ? null : description.trim(), user.getId());
         if (defaultAutoApprove) {
             pushPoolRepository.updateStatus(item.id(), "APPROVED", null);
@@ -138,12 +137,28 @@ public class PushPoolServiceImpl implements PushPoolService {
         if (!"APPROVED".equals(item.status()) && !"PUBLISHED".equals(item.status())) {
             throw new BusinessException(400, "push item is not available for submission");
         }
-        if (submissionLink == null || submissionLink.isBlank()) {
-            throw new BusinessException(400, "submission_link is required");
-        }
+        String safeSubmissionLink = requireHttpUrl(submissionLink, "submissionLink");
         return pushPoolRepository.insertSubmission(pushId, user.getId(),
-                submissionLink.trim(),
+                safeSubmissionLink,
                 resultDescription == null ? null : resultDescription.trim());
+    }
+
+    private String requireHttpUrl(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(400, field + " is required");
+        }
+        try {
+            URI uri = URI.create(value.trim());
+            String scheme = uri.getScheme();
+            if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && uri.getHost() != null
+                    && uri.getUserInfo() == null) {
+                return uri.toString();
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Converted to a stable validation error below.
+        }
+        throw new BusinessException(400, field + " must be a valid http/https URL");
     }
 
     @Override
