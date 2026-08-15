@@ -89,7 +89,7 @@ export default function AdminDailyPage() {
               className="px-4 py-2 text-sm font-medium text-white bg-text-primary hover:bg-[#1b1f23] rounded-ui border-0 cursor-pointer"
               onClick={handleRegenerate}
             >
-              重生成全部今日题
+              重新生成每日一题
             </button>
           </div>
         </div>

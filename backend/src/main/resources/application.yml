@@ -62,8 +62,8 @@ app:
     service:
       enabled: true
   auth:
-    access-token-ttl-seconds: 1800
-    refresh-token-ttl-seconds: 604800
+    access-token-ttl-seconds: "${ACCESS_TOKEN_TTL_SECONDS:7200}"
+    refresh-token-ttl-seconds: "${REFRESH_TOKEN_TTL_SECONDS:2592000}"
   daily-problem:
     initial-sync-enabled: true
     min-rating: 1200

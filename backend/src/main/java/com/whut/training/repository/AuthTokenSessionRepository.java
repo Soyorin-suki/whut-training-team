@@ -123,8 +123,7 @@ public class AuthTokenSessionRepository {
      */
     public int deleteExpiredBefore(long epochSeconds) {
         return jdbcTemplate.update(
-                "DELETE FROM auth_token_session WHERE access_expired_at_seconds <= ? OR refresh_expired_at_seconds <= ?",
-                epochSeconds,
+                "DELETE FROM auth_token_session WHERE refresh_expired_at_seconds <= ?",
                 epochSeconds
         );
     }

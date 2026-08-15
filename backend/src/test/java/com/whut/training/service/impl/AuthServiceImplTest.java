@@ -4,6 +4,7 @@ import com.whut.training.common.TimeProvider;
 import com.whut.training.domain.dto.LoginRequest;
 import com.whut.training.domain.entity.User;
 import com.whut.training.domain.enums.UserRole;
+import com.whut.training.exception.BusinessException;
 import com.whut.training.repository.AuthTokenSessionRepository;
 import com.whut.training.repository.UserRepository;
 import com.whut.training.service.CodeforcesApiService;
@@ -15,7 +16,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,6 +76,27 @@ class AuthServiceImplTest {
 
         assertThat(user.getPassword()).isEqualTo("$2a$12$upgraded");
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void keepsRefreshTokenUsableAfterAccessTokenExpires() {
+        var session = new AuthTokenSessionRepository.AuthTokenSession(
+                3L, "expired-access", "active-refresh", 999L, 2_000L
+        );
+        when(tokenRepository.findByAccessToken("expired-access")).thenReturn(Optional.of(session));
+        when(tokenRepository.findByRefreshToken("active-refresh")).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> authService.validateAccessTokenAndGetUser("expired-access"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("access token expired");
+        verify(tokenRepository, never()).deleteByAccessToken("expired-access");
+
+        var refreshed = authService.refresh("active-refresh");
+
+        assertThat(refreshed.accessToken()).isNotBlank();
+        assertThat(refreshed.refreshToken()).isNotBlank();
+        verify(tokenRepository).deleteByRefreshToken("active-refresh");
+        verify(tokenRepository).save(any(AuthTokenSessionRepository.AuthTokenSession.class));
     }
 
     private LoginRequest login(String username, String password) {

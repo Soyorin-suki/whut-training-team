@@ -67,11 +67,12 @@ public class PushPoolRepository {
     }
 
     public PushPoolItem insert(String title, String link, String description, Long submitterId) {
-        String sql = "INSERT INTO push_pool (title, link, description, submitter_id, status, sort_order, created_at) VALUES (?, ?, ?, ?, 'PENDING', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM push_pool), ?)";
+        String sql = "INSERT INTO push_pool (title, link, description, submitter_id, status, sort_order, created_at) "
+                + "SELECT ?, ?, ?, ?, 'PENDING', COALESCE(MAX(sort_order), 0) + 1, ? FROM push_pool";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         Timestamp now = Timestamp.valueOf(LocalDateTime.now());
         jdbcTemplate.update(connection -> {
-            var stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            var stmt = connection.prepareStatement(sql, new String[]{"id"});
             stmt.setString(1, title);
             stmt.setString(2, link);
             stmt.setString(3, description);
@@ -80,7 +81,8 @@ public class PushPoolRepository {
             return stmt;
         }, keyHolder);
         Long id = keyHolder.getKey() == null ? null : keyHolder.getKey().longValue();
-        return new PushPoolItem(id, title, link, description, submitterId, null, "PENDING", null, now.toLocalDateTime(), null, null);
+        return new PushPoolItem(id, title, link, description, submitterId, null, "PENDING", null,
+                now.toLocalDateTime(), null, null);
     }
 
     public Optional<PushPoolItem> findById(Long id) {
@@ -128,7 +130,11 @@ public class PushPoolRepository {
     }
 
     public void promoteToFront(Long id) {
-        jdbcTemplate.update("UPDATE push_pool SET sort_order = (SELECT MIN(sort_order) - 1 FROM push_pool) WHERE id = ?", id);
+        Integer nextSortOrder = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(MIN(sort_order), 1) - 1 FROM push_pool",
+                Integer.class
+        );
+        jdbcTemplate.update("UPDATE push_pool SET sort_order = ? WHERE id = ?", nextSortOrder, id);
     }
 
     public Optional<PushPoolItem> popNextApproved() {

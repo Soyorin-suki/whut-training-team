@@ -49,8 +49,8 @@ public class AuthServiceImpl implements AuthService {
             AuthTokenSessionRepository authTokenSessionRepository,
             TimeProvider timeProvider,
             PasswordEncoder passwordEncoder,
-            @Value("${app.auth.access-token-ttl-seconds:1800}") long accessTokenTtlSeconds,
-            @Value("${app.auth.refresh-token-ttl-seconds:604800}") long refreshTokenTtlSeconds
+            @Value("${app.auth.access-token-ttl-seconds:7200}") long accessTokenTtlSeconds,
+            @Value("${app.auth.refresh-token-ttl-seconds:2592000}") long refreshTokenTtlSeconds
     ) {
         this.userService = userService;
         this.codeforcesApiService = codeforcesApiService;
@@ -178,7 +178,6 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new BusinessException(401, "invalid access token"));
         long nowSeconds = timeProvider.nowEpochSecond();
         if (nowSeconds >= accessSession.accessExpiredAtSeconds()) {
-            authTokenSessionRepository.deleteByAccessToken(accessToken);
             throw new BusinessException(401, "access token expired");
         }
         return accessSession;
