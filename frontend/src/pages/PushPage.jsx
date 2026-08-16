@@ -26,6 +26,8 @@ export default function PushPage() {
   const [title, setTitle] = useState("");
   const [link, setLink] = useState("");
   const [description, setDescription] = useState("");
+  const [submitMessage, setSubmitMessage] = useState("");
+  const [submittingPush, setSubmittingPush] = useState(false);
 
   // Submit solution modal
   const [solvePushId, setSolvePushId] = useState(null);
@@ -65,23 +67,26 @@ export default function PushPage() {
 
   async function handleSubmitPush() {
     if (!title.trim() || !link.trim()) {
-      setMessage("标题和链接不能为空");
+      setSubmitMessage("标题和链接不能为空");
       return;
     }
-    setMessage("");
+    setSubmitMessage("");
+    setSubmittingPush(true);
     try {
       const resp = await submitPush(title.trim(), link.trim(), description.trim() || null);
       if (resp.code === 200) {
         setTitle("");
         setLink("");
         setDescription("");
-        setMessage("推题提交成功");
+        setSubmitMessage("推题提交成功，正在等待管理员审核");
         loadData();
       } else {
-        setMessage(resp.message || "提交失败");
+        setSubmitMessage(resp.message || "提交失败");
       }
-    } catch {
-      setMessage("提交请求失败");
+    } catch (error) {
+      setSubmitMessage(error?.response?.data?.message || "提交请求失败，请稍后重试");
+    } finally {
+      setSubmittingPush(false);
     }
   }
 
@@ -246,12 +251,14 @@ export default function PushPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="题目标题 *"
+                maxLength={255}
               />
               <input
                 className="w-full px-3 py-2 text-sm border border-border rounded-ui outline-none focus:border-text-primary"
                 value={link}
                 onChange={(e) => setLink(e.target.value)}
-                placeholder="题目链接 *"
+                placeholder="题目链接 *（可直接填写 codeforces.com/...）"
+                maxLength={1000}
               />
               <textarea
                 className="w-full px-3 py-2 text-sm border border-border rounded-ui outline-none focus:border-text-primary resize-y"
@@ -259,12 +266,19 @@ export default function PushPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="题目描述（可选）"
+                maxLength={2000}
               />
+              {submitMessage && (
+                <p className="m-0 rounded-ui bg-bg-secondary px-3 py-2 text-sm text-text-secondary">
+                  {submitMessage}
+                </p>
+              )}
               <button
                 className="px-4 py-2 text-sm font-medium text-white bg-text-primary hover:bg-[#1b1f23] rounded-ui border-0 cursor-pointer"
                 onClick={handleSubmitPush}
+                disabled={submittingPush}
               >
-                提交推题
+                {submittingPush ? "提交中..." : "提交推题"}
               </button>
             </div>
           </Accordion.Content>

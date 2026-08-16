@@ -147,8 +147,12 @@ public class PushPoolServiceImpl implements PushPoolService {
         if (value == null || value.isBlank()) {
             throw new BusinessException(400, field + " is required");
         }
+        String normalized = value.trim();
+        if (!normalized.matches("(?i)^[a-z][a-z0-9+.-]*://.*")) {
+            normalized = "https://" + normalized;
+        }
         try {
-            URI uri = URI.create(value.trim());
+            URI uri = URI.create(normalized);
             String scheme = uri.getScheme();
             if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
                     && uri.getHost() != null

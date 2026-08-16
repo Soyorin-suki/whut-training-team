@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +49,30 @@ class PushPoolServiceImplSecurityTest {
 
         assertEquals(400, error.getCode());
         verify(repository, never()).insert(any(), any(), any(), any());
+    }
+
+    @Test
+    void acceptsProblemLinkWithoutScheme() {
+        PushPoolItem inserted = new PushPoolItem(
+                4L, "problem", "https://codeforces.com/problemset/problem/1/A", null, 1L,
+                "member", "PENDING", 1, LocalDateTime.now(), null, null
+        );
+        when(repository.insert(
+                eq("problem"),
+                eq("https://codeforces.com/problemset/problem/1/A"),
+                eq(null),
+                eq(1L)
+        )).thenReturn(inserted);
+        when(repository.findById(4L)).thenReturn(Optional.of(inserted));
+
+        PushPoolItem result = service.submit(
+                user,
+                "problem",
+                "codeforces.com/problemset/problem/1/A",
+                null
+        );
+
+        assertEquals(inserted, result);
     }
 
     @Test
