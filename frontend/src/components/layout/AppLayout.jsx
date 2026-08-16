@@ -30,12 +30,12 @@ export default function AppLayout() {
     let cancelled = false;
     checkDevStatus()
       .then((resp) => {
-        if (!cancelled && resp?.code === 200) {
-          setDevMode(true);
+        if (!cancelled) {
+          setDevMode(resp?.code === 200 && resp?.data?.active === true);
         }
       })
       .catch(() => {
-        // prod 后端无 /api/dev/status → 404，静默忽略
+        // 调试能力探测失败不影响正常页面。
       });
     return () => { cancelled = true; };
   }, [setDevMode]);
