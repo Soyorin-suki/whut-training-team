@@ -67,7 +67,7 @@ class MySqlRepositoryCompatibilityTest {
         userRepository.save(user);
         assertThat(user.getId()).isNotNull();
         authTokenSessionRepository.save(new AuthTokenSessionRepository.AuthTokenSession(
-                user.getId(), "raw-access-token", "raw-refresh-token", 2_000L, 3_000L
+                user.getId(), "raw-access-token", "raw-refresh-token", 2_000L, 3_000L, 1_000L
         ));
         assertThat(authTokenSessionRepository.findByAccessToken("raw-access-token"))
                 .get()
@@ -77,7 +77,7 @@ class MySqlRepositoryCompatibilityTest {
                 });
         assertThat(authTokenSessionRepository.findByRefreshToken("raw-refresh-token")).isPresent();
         authTokenSessionRepository.save(new AuthTokenSessionRepository.AuthTokenSession(
-                user.getId(), "expired-access-token", "live-refresh-token", 900L, 1_100L
+                user.getId(), "expired-access-token", "live-refresh-token", 900L, 1_100L, 1_000L
         ));
         authTokenSessionRepository.deleteExpiredBefore(1_000L);
         assertThat(authTokenSessionRepository.findByRefreshToken("live-refresh-token")).isPresent();

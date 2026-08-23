@@ -21,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -81,7 +82,7 @@ class AuthServiceImplTest {
     @Test
     void keepsRefreshTokenUsableAfterAccessTokenExpires() {
         var session = new AuthTokenSessionRepository.AuthTokenSession(
-                3L, "expired-access", "active-refresh", 999L, 2_000L
+                3L, "expired-access", "active-refresh", 999L, 2_000L, 500L
         );
         when(tokenRepository.findByAccessToken("expired-access")).thenReturn(Optional.of(session));
         when(tokenRepository.findByRefreshToken("active-refresh")).thenReturn(Optional.of(session));
@@ -97,6 +98,33 @@ class AuthServiceImplTest {
         assertThat(refreshed.refreshToken()).isNotBlank();
         verify(tokenRepository).deleteByRefreshToken("active-refresh");
         verify(tokenRepository).save(any(AuthTokenSessionRepository.AuthTokenSession.class));
+    }
+
+    @Test
+    void refreshKeepsTheOriginalSessionDeadline() {
+        authService = new AuthServiceImpl(
+                userService,
+                codeforcesApiService,
+                userRepository,
+                tokenRepository,
+                timeProvider,
+                passwordEncoder,
+                7_200,
+                21_600
+        );
+        var session = new AuthTokenSessionRepository.AuthTokenSession(
+                3L, "old-access", "active-refresh", 8_200L, 22_600L, 1_000L
+        );
+        when(timeProvider.nowEpochSecond()).thenReturn(8_000L);
+        when(tokenRepository.findByRefreshToken("active-refresh")).thenReturn(Optional.of(session));
+
+        authService.refresh("active-refresh");
+
+        verify(tokenRepository).save(argThat(saved ->
+                saved.createdAtSeconds().equals(1_000L)
+                        && saved.refreshExpiredAtSeconds().equals(22_600L)
+                        && saved.accessExpiredAtSeconds().equals(15_200L)
+        ));
     }
 
     private LoginRequest login(String username, String password) {

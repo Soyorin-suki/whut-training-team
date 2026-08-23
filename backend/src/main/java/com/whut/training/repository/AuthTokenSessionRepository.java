@@ -4,7 +4,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -26,7 +25,8 @@ public class AuthTokenSessionRepository {
             rs.getString("access_token"),
             rs.getString("refresh_token"),
             rs.getLong("access_expired_at_seconds"),
-            rs.getLong("refresh_expired_at_seconds")
+            rs.getLong("refresh_expired_at_seconds"),
+            rs.getLong("created_at_seconds")
     );
 
     /**
@@ -51,7 +51,7 @@ public class AuthTokenSessionRepository {
                 tokenHash(session.refreshToken()),
                 session.accessExpiredAtSeconds(),
                 session.refreshExpiredAtSeconds(),
-                Instant.now().getEpochSecond()
+                session.createdAtSeconds()
         );
     }
 
@@ -63,7 +63,7 @@ public class AuthTokenSessionRepository {
      */
     public Optional<AuthTokenSession> findByAccessToken(String accessToken) {
         List<AuthTokenSession> rows = jdbcTemplate.query(
-                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds FROM auth_token_session WHERE access_token IN (?, ?)",
+                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds, created_at_seconds FROM auth_token_session WHERE access_token IN (?, ?)",
                 rowMapper,
                 accessToken,
                 tokenHash(accessToken)
@@ -79,7 +79,7 @@ public class AuthTokenSessionRepository {
      */
     public Optional<AuthTokenSession> findByRefreshToken(String refreshToken) {
         List<AuthTokenSession> rows = jdbcTemplate.query(
-                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds FROM auth_token_session WHERE refresh_token IN (?, ?)",
+                "SELECT user_id, access_token, refresh_token, access_expired_at_seconds, refresh_expired_at_seconds, created_at_seconds FROM auth_token_session WHERE refresh_token IN (?, ?)",
                 rowMapper,
                 refreshToken,
                 tokenHash(refreshToken)
@@ -148,13 +148,15 @@ public class AuthTokenSessionRepository {
      * @param refreshToken            refresh token。
      * @param accessExpiredAtSeconds  access token 过期时间戳。
      * @param refreshExpiredAtSeconds refresh token 过期时间戳。
+     * @param createdAtSeconds        本次登录会话的初始创建时间戳。
      */
     public record AuthTokenSession(
             Long userId,
             String accessToken,
             String refreshToken,
             Long accessExpiredAtSeconds,
-            Long refreshExpiredAtSeconds
+            Long refreshExpiredAtSeconds,
+            Long createdAtSeconds
     ) {
     }
 }

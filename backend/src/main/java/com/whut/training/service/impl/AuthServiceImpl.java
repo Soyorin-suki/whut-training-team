@@ -50,7 +50,7 @@ public class AuthServiceImpl implements AuthService {
             TimeProvider timeProvider,
             PasswordEncoder passwordEncoder,
             @Value("${app.auth.access-token-ttl-seconds:7200}") long accessTokenTtlSeconds,
-            @Value("${app.auth.refresh-token-ttl-seconds:2592000}") long refreshTokenTtlSeconds
+            @Value("${app.auth.refresh-token-ttl-seconds:21600}") long refreshTokenTtlSeconds
     ) {
         this.userService = userService;
         this.codeforcesApiService = codeforcesApiService;
@@ -124,7 +124,7 @@ public class AuthServiceImpl implements AuthService {
         authTokenSessionRepository.deleteByRefreshToken(refreshToken);
         authTokenSessionRepository.deleteByAccessToken(refreshSession.accessToken());
 
-        TokenPair nextPair = issueTokenPair(refreshSession.userId());
+        TokenPair nextPair = issueTokenPair(refreshSession.userId(), refreshSession.createdAtSeconds());
         return new RefreshTokenResponse(nextPair.accessToken(), nextPair.refreshToken());
     }
 
@@ -213,15 +213,24 @@ public class AuthServiceImpl implements AuthService {
      * @return token 对。
      */
     private TokenPair issueTokenPair(Long userId) {
+        return issueTokenPair(userId, timeProvider.nowEpochSecond());
+    }
+
+    /**
+     * 刷新 token 时沿用首次登录时间，避免活跃请求无限延长会话。
+     */
+    private TokenPair issueTokenPair(Long userId, long sessionStartedAtSeconds) {
         String accessToken = UUID.randomUUID().toString();
         String refreshToken = UUID.randomUUID().toString();
         long nowSeconds = timeProvider.nowEpochSecond();
+        long sessionExpiresAtSeconds = sessionStartedAtSeconds + refreshTokenTtlSeconds;
         AuthTokenSession session = new AuthTokenSession(
                 userId,
                 accessToken,
                 refreshToken,
-                nowSeconds + accessTokenTtlSeconds,
-                nowSeconds + refreshTokenTtlSeconds
+                Math.min(nowSeconds + accessTokenTtlSeconds, sessionExpiresAtSeconds),
+                sessionExpiresAtSeconds,
+                sessionStartedAtSeconds
         );
         try {
             authTokenSessionRepository.deleteExpiredBefore(timeProvider.nowEpochSecond());
