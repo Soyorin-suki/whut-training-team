@@ -68,12 +68,15 @@ app:
     initial-sync-enabled: true
     min-rating: 1200
     max-rating: 2000
+    easy-min-rating: 800
+    easy-max-rating: 1800
+    hard-min-rating: 1900
+    hard-max-rating: 3000
     no-repeat-days: 90
     cron: "0 5 0 * * *"
     sync-cron: "0 0 0 * * MON"
     zone: "Asia/Shanghai"
   daily:
-    ratingThreshold: 1700
     historyRetentionDays: 0
   atcoder-tracking:
     fixed-delay-ms: 1800000

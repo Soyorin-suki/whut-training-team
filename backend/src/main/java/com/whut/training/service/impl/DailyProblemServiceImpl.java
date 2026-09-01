@@ -47,7 +47,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
     private final int defaultMinRating;
     private final int defaultMaxRating;
     private final int noRepeatDays;
-    private final int ratingThreshold;
+    private final int easyMinRating;
+    private final int easyMaxRating;
+    private final int hardMinRating;
+    private final int hardMaxRating;
     private final boolean initialSyncEnabled;
 
     public DailyProblemServiceImpl(
@@ -58,7 +61,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             @Value("${app.daily-problem.min-rating:1200}") int defaultMinRating,
             @Value("${app.daily-problem.max-rating:2000}") int defaultMaxRating,
             @Value("${app.daily-problem.no-repeat-days:90}") int noRepeatDays,
-            @Value("${app.daily.ratingThreshold:1700}") int ratingThreshold,
+            @Value("${app.daily-problem.easy-min-rating:800}") int easyMinRating,
+            @Value("${app.daily-problem.easy-max-rating:1800}") int easyMaxRating,
+            @Value("${app.daily-problem.hard-min-rating:1900}") int hardMinRating,
+            @Value("${app.daily-problem.hard-max-rating:3000}") int hardMaxRating,
             @Value("${app.daily-problem.initial-sync-enabled:true}") boolean initialSyncEnabled
     ) {
         this.dailyProblemRepository = dailyProblemRepository;
@@ -68,7 +74,10 @@ public class DailyProblemServiceImpl implements DailyProblemService {
         this.defaultMinRating = defaultMinRating;
         this.defaultMaxRating = defaultMaxRating;
         this.noRepeatDays = noRepeatDays;
-        this.ratingThreshold = ratingThreshold;
+        this.easyMinRating = easyMinRating;
+        this.easyMaxRating = easyMaxRating;
+        this.hardMinRating = hardMinRating;
+        this.hardMaxRating = hardMaxRating;
         this.initialSyncEnabled = initialSyncEnabled;
     }
 
@@ -434,16 +443,12 @@ public class DailyProblemServiceImpl implements DailyProblemService {
 
         CfProblem picked = null;
         if ("easy".equalsIgnoreCase(slot)) {
-            Integer easyMin = defaultMinRating;
-            Integer easyMax = Math.min(defaultMaxRating, ratingThreshold);
-            picked = dailyProblemRepository.findRandomProblem(easyMin, easyMax, noRepeatAfterDate)
-                    .or(() -> dailyProblemRepository.findRandomProblem(easyMin, easyMax))
+            picked = dailyProblemRepository.findRandomProblem(easyMinRating, easyMaxRating, noRepeatAfterDate)
+                    .or(() -> dailyProblemRepository.findRandomProblem(easyMinRating, easyMaxRating))
                     .orElseThrow(() -> new BusinessException(500, "failed to select easy problem"));
         } else if ("hard".equalsIgnoreCase(slot)) {
-            Integer hardMin = Math.max(defaultMinRating, ratingThreshold + 1);
-            Integer hardMax = defaultMaxRating;
-            picked = dailyProblemRepository.findRandomProblem(hardMin, hardMax, noRepeatAfterDate)
-                    .or(() -> dailyProblemRepository.findRandomProblem(hardMin, hardMax))
+            picked = dailyProblemRepository.findRandomProblem(hardMinRating, hardMaxRating, noRepeatAfterDate)
+                    .or(() -> dailyProblemRepository.findRandomProblem(hardMinRating, hardMaxRating))
                     .orElseThrow(() -> new BusinessException(500, "failed to select hard problem"));
         } else {
             throw new BusinessException(400, "invalid slot");
@@ -518,18 +523,14 @@ public class DailyProblemServiceImpl implements DailyProblemService {
             ensureProblemPoolAvailable();
             LocalDate noRepeatAfterDate = date.minusDays(Math.max(1, noRepeatDays));
 
-            // easy: defaultMinRating .. ratingThreshold
-            Integer easyMin = defaultMinRating;
-            Integer easyMax = Math.min(defaultMaxRating, ratingThreshold);
-            CfProblem easy = hasActiveEasy ? null : dailyProblemRepository.findRandomProblem(easyMin, easyMax, noRepeatAfterDate)
-                    .or(() -> dailyProblemRepository.findRandomProblem(easyMin, easyMax))
+            // easy: 800 .. 1800 by default (independently configurable)
+            CfProblem easy = hasActiveEasy ? null : dailyProblemRepository.findRandomProblem(easyMinRating, easyMaxRating, noRepeatAfterDate)
+                    .or(() -> dailyProblemRepository.findRandomProblem(easyMinRating, easyMaxRating))
                     .orElse(null);
 
-            // hard: ratingThreshold+1 .. defaultMaxRating
-            Integer hardMin = Math.max(defaultMinRating, ratingThreshold + 1);
-            Integer hardMax = defaultMaxRating;
-            CfProblem hard = hasActiveHard ? null : dailyProblemRepository.findRandomProblem(hardMin, hardMax, noRepeatAfterDate)
-                    .or(() -> dailyProblemRepository.findRandomProblem(hardMin, hardMax))
+            // hard: 1900 .. 3000 by default; 1801..1899 is intentionally left out.
+            CfProblem hard = hasActiveHard ? null : dailyProblemRepository.findRandomProblem(hardMinRating, hardMaxRating, noRepeatAfterDate)
+                    .or(() -> dailyProblemRepository.findRandomProblem(hardMinRating, hardMaxRating))
                     .orElse(null);
 
             if (easy != null) {

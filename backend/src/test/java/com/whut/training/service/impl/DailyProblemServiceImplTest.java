@@ -55,7 +55,10 @@ class DailyProblemServiceImplTest {
                 1200,
                 2000,
                 90,
-                1700,
+                800,
+                1800,
+                1900,
+                3000,
                 true
         );
 
@@ -96,7 +99,7 @@ class DailyProblemServiceImplTest {
 
         DailyProblemServiceImpl service = new DailyProblemServiceImpl(
                 repository, codeforcesApiService, userRepository, timeProvider,
-                1200, 2000, 90, 1700, true
+                1200, 2000, 90, 800, 1800, 1900, 3000, true
         );
         var result = service.checkIn(user, 999L);
 
